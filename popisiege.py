@@ -12,7 +12,7 @@ Usage:
   python3 popisiege-vps.py --help
 """
 
-import requests, time, sys, threading, itertools, argparse
+import requests, time, sys, threading, itertools, argparse, subprocess, os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
@@ -75,6 +75,23 @@ class ProxyPool:
 
     def alive(self):
         return len(self.proxies) - len(self._dead)
+
+    def refresh(self, proxy_file):
+        """Re-run proxy tester and reload the pool."""
+        print(f"\n  {Y}[PROXY]{W} Pool exhausted — running proxy_tester.py to refresh...\n")
+        tester = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxy_tester.py")
+        subprocess.run([sys.executable, tester, "--output", proxy_file], check=False)
+        with open(proxy_file) as f:
+            raw = [l.strip() for l in f if l.strip()]
+        new_proxies = [
+            p if p.startswith(("http","socks")) else f"http://{p}"
+            for p in raw
+        ]
+        with self._lock:
+            self.proxies = new_proxies
+            self._cycle  = itertools.cycle(self.proxies)
+            self._dead   = set()
+        print(f"\n  {G}[PROXY]{W} Refreshed — {len(self.proxies)} proxies loaded. Continuing...\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -239,8 +256,7 @@ def main():
                       f"Avail={avail:.1f}% | Avg={avg_t:.2f}s | {status}\n")
 
             if pool.alive() == 0:
-                print(f"\n  {R}[!]{W} All proxies exhausted.")
-                break
+                pool.refresh(args.proxy_file)
 
             if args.delay > 0:
                 time.sleep(args.delay)
