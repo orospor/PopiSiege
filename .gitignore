@@ -4,4 +4,4 @@ __pycache__/
 .DS_Store
 /tmp/
 *.log
-working_proxies.txt
+# working_proxies.txt

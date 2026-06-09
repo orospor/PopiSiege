@@ -12,7 +12,8 @@ Usage:
   python3 popisiege-vps.py --help
 """
 
-import requests, time, sys, threading, itertools, argparse, subprocess, os
+import requests, time, sys, threading, itertools, argparse, subprocess
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
@@ -25,7 +26,8 @@ BROWSER_UA = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-PROXY_FILE = "/tmp/working_proxies.txt"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROXY_FILE = os.path.join(SCRIPT_DIR, "proxies.txt")
 
 # ── known targets ─────────────────────────────────────────────────────────────
 TARGETS = {
@@ -77,21 +79,12 @@ class ProxyPool:
         return len(self.proxies) - len(self._dead)
 
     def refresh(self, proxy_file):
-        """Re-run proxy tester and reload the pool."""
-        print(f"\n  {Y}[PROXY]{W} Pool exhausted — running proxy_tester.py to refresh...\n")
-        tester = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxy_tester.py")
-        subprocess.run([sys.executable, tester, "--output", proxy_file], check=False)
-        with open(proxy_file) as f:
-            raw = [l.strip() for l in f if l.strip()]
-        new_proxies = [
-            p if p.startswith(("http","socks")) else f"http://{p}"
-            for p in raw
-        ]
+        """Reset dead set and cycle through bundled proxies again."""
+        print(f"\n  {Y}[PROXY]{W} Pool exhausted — resetting and cycling through proxies again...\n")
         with self._lock:
-            self.proxies = new_proxies
-            self._cycle  = itertools.cycle(self.proxies)
-            self._dead   = set()
-        print(f"\n  {G}[PROXY]{W} Refreshed — {len(self.proxies)} proxies loaded. Continuing...\n")
+            self._dead  = set()
+            self._cycle = itertools.cycle(self.proxies)
+        print(f"\n  {G}[PROXY]{W} Reset — {len(self.proxies)} proxies back in rotation.\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -191,30 +184,12 @@ def main():
     cfg         = TARGETS[domain]
     concurrency = args.concurrency or cfg["threshold"]
 
-    # ── load proxies — auto-run tester if missing or stale (>6h) ────────────
-    tester     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxy_tester.py")
-    proxy_file = args.proxy_file
-    max_age    = 6 * 3600   # 6 hours
-
-    need_refresh = False
-    if not os.path.exists(proxy_file):
-        print(f"\n  {Y}[PROXY]{W} No proxy file found — running proxy_tester.py...")
-        need_refresh = True
-    elif time.time() - os.path.getmtime(proxy_file) > max_age:
-        age_h = (time.time() - os.path.getmtime(proxy_file)) / 3600
-        print(f"\n  {Y}[PROXY]{W} Proxy file is {age_h:.1f}h old — refreshing...")
-        need_refresh = True
-    else:
-        age_m = (time.time() - os.path.getmtime(proxy_file)) / 60
-        print(f"\n  {G}[PROXY]{W} Using existing proxy file ({age_m:.0f} min old)")
-
-    if need_refresh:
-        subprocess.run([sys.executable, tester, "--output", proxy_file], check=False)
-
+    # ── load proxies ──────────────────────────────────────────────────────────
     try:
-        pool = ProxyPool(proxy_file)
+        pool = ProxyPool(args.proxy_file)
     except FileNotFoundError:
-        print(f"\n  {R}[ERROR]{W} Proxy file still missing after tester ran.\n")
+        print(f"\n  {R}[ERROR]{W} Proxy file not found: {args.proxy_file}")
+        print(f"  Run: python3 proxy_tester.py\n")
         sys.exit(1)
 
     print(f"""
