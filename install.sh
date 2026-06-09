@@ -24,7 +24,7 @@ fi
 
 # install python deps
 echo "[*] Installing Python dependencies..."
-pip3 install -r "$INSTALL_DIR/requirements.txt" -q
+pip3 install -r "$INSTALL_DIR/requirements.txt" -q --break-system-packages
 
 # create global launcher
 echo "[*] Creating global command..."
