@@ -11,16 +11,9 @@ Usage:
 """
 
 import requests, concurrent.futures, time, threading, argparse, sys
+from proxy_pool import SOURCES, TEST_URL
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"; W = "\033[0m"; B = "\033[1m"
-
-SOURCES = [
-    ("TheSpeedX HTTP",   "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",   "http"),
-    ("TheSpeedX SOCKS5", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt", "socks5"),
-    ("Proxifly All",     "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt", None),
-]
-
-TEST_URL = "https://httpbin.org/ip"
 
 
 def fetch_sources():
