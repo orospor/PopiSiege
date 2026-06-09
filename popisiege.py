@@ -191,12 +191,30 @@ def main():
     cfg         = TARGETS[domain]
     concurrency = args.concurrency or cfg["threshold"]
 
-    # ── load proxies ──────────────────────────────────────────────────────────
+    # ── load proxies — auto-run tester if missing or stale (>6h) ────────────
+    tester     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxy_tester.py")
+    proxy_file = args.proxy_file
+    max_age    = 6 * 3600   # 6 hours
+
+    need_refresh = False
+    if not os.path.exists(proxy_file):
+        print(f"\n  {Y}[PROXY]{W} No proxy file found — running proxy_tester.py...")
+        need_refresh = True
+    elif time.time() - os.path.getmtime(proxy_file) > max_age:
+        age_h = (time.time() - os.path.getmtime(proxy_file)) / 3600
+        print(f"\n  {Y}[PROXY]{W} Proxy file is {age_h:.1f}h old — refreshing...")
+        need_refresh = True
+    else:
+        age_m = (time.time() - os.path.getmtime(proxy_file)) / 60
+        print(f"\n  {G}[PROXY]{W} Using existing proxy file ({age_m:.0f} min old)")
+
+    if need_refresh:
+        subprocess.run([sys.executable, tester, "--output", proxy_file], check=False)
+
     try:
-        pool = ProxyPool(args.proxy_file)
+        pool = ProxyPool(proxy_file)
     except FileNotFoundError:
-        print(f"\n  {R}[ERROR]{W} Proxy file not found: {args.proxy_file}")
-        print(f"  Run the proxy tester first.\n")
+        print(f"\n  {R}[ERROR]{W} Proxy file still missing after tester ran.\n")
         sys.exit(1)
 
     print(f"""
