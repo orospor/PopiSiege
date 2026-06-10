@@ -239,7 +239,42 @@ RPS     : 0.81
 - Max 12.25s = some requests waited 11+ seconds for a free worker
 - At concurrency 38+ (two simultaneous VPS instances), availability drops to ~0%
 
-### 5.3 Secondary Attack Vector: WordPress Search
+### 5.3 Alternative PoC: Local IP Aliasing (Zero External Dependency)
+
+For isolated lab environments where external proxies are unavailable, the same IP-rotation bypass can be demonstrated using kernel-level virtual IP aliasing on the loopback interface. The Linux and macOS kernels support assigning multiple IP addresses to a single network interface. Each aliased IP is treated as a distinct source by the target application stack.
+
+**Setup (Linux):**
+```bash
+for i in $(seq 1 50); do
+    sudo ip addr add 10.0.0.$i/8 dev lo
+done
+```
+
+**Setup (macOS):**
+```bash
+for i in $(seq 1 50); do
+    sudo ifconfig lo0 alias 10.0.0.$i netmask 255.255.255.255
+done
+```
+
+The attack script binds each concurrent request to a different aliased IP. WordPress, Nginx, and Wordfence see 50 distinct source addresses — per-IP rate limiting is bypassed identically to the proxy-based approach. PHP workers exhaust. The site goes down.
+
+**Why this matters:** The attack does not require external infrastructure. A single laptop with a local WordPress Docker container, 50 IP aliases, and the PoC script is sufficient to fully demonstrate the vulnerability — no internet connection, no proxy accounts, no VPS. The Class A private range (`10.0.0.0/8`) alone provides 16,777,216 addressable aliases, far exceeding any realistic worker pool limit.
+
+This approach was identified during research as a reproducible alternative for conference demonstrations and peer review environments where external network access is restricted.
+
+**Teardown:**
+```bash
+# Linux
+for i in $(seq 1 50); do sudo ip addr del 10.0.0.$i/8 dev lo; done
+
+# macOS
+for i in $(seq 1 50); do sudo ifconfig lo0 -alias 10.0.0.$i; done
+```
+
+---
+
+### 5.4 Secondary Attack Vector: WordPress Search
 
 The WordPress core search endpoint (`/?s=<query>`) is equally vulnerable and unrelated to CF7:
 

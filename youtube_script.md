@@ -158,7 +158,37 @@ That's a 113,000 to 1 amplification ratio.
 
 ---
 
-## WHY RECAPTCHA DOESN'T HELP (8:00 – 9:00)
+## BONUS: REPRODUCING THIS WITH ZERO EXTERNAL DEPENDENCIES (8:00 – 8:45)
+
+**[SCREEN: Terminal — ifconfig / ip addr commands]**
+
+Here's something interesting we figured out during research.
+
+The whole attack relies on each request appearing to come from a different IP. Normally that means proxies — external servers routing your traffic. But what if you don't have proxies? What if you're in a lab with no internet?
+
+The Linux and macOS kernels let you assign multiple IP addresses to a single network interface. It's called IP aliasing. One laptop. Fifty virtual IPs. All local.
+
+**[SCREEN: Terminal — creating IP aliases]**
+
+```bash
+for i in $(seq 1 50); do
+    sudo ip addr add 10.0.0.$i/8 dev lo
+done
+```
+
+You now have 50 source IPs on a single machine. The attack script binds each request to a different one — WordPress sees 50 different clients. Per-IP rate limiting is bypassed identically.
+
+**[SCREEN: Wordfence log showing 10.0.0.1, 10.0.0.2, 10.0.0.3... all blocked]**
+
+The Class A private range gives you 16 million addresses. That's more IPs than any server has workers.
+
+No proxies. No VPS. No internet connection. One laptop, a Docker container, and a terminal. Full demonstration.
+
+This is useful for conference demos, peer review, and anyone who wants to reproduce the research in an airgapped environment.
+
+---
+
+## WHY RECAPTCHA DOESN'T HELP (8:45 – 9:45)
 
 **[SCREEN: reCAPTCHA on contact form]**
 
