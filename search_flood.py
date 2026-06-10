@@ -90,8 +90,9 @@ def send_search(req_num, target, pool):
     if not proxy:
         return req_num, 0, 0, 0, "N/A", "none", "no proxy available"
 
-    term = random.choice(SEARCH_TERMS)
-    url  = f"https://{target}/?s={term}"
+    term  = random.choice(SEARCH_TERMS)
+    bust  = random.randint(1, 999999)
+    url   = f"https://{target}/?s={term}{bust}"
 
     s = requests.Session()
     s.proxies = {"http": proxy, "https": proxy}
