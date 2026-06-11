@@ -1,141 +1,185 @@
 # PopiSiege
 
-**WordPress Contact Form 7 — WAF Threshold & Worker Exhaustion Research Tool**
+Orospor Labs research toolkit for measuring WordPress Contact Form 7 and
+WordPress search endpoint resilience under authorized, controlled load.
 
-> Co-authored by Gurujee & Popi  
-> For authorised security research only. Only use on servers you own or have written permission to test.
+PopiSiege was built to study where CDN/WAF policy stops and origin PHP work
+begins. It focuses on two high-cost WordPress paths:
 
----
+- Contact Form 7 REST feedback submissions
+- WordPress search requests through `/?s=`
 
-## What It Does
+The project includes tooling for proxy pool validation, burst-based request
+tests, and a technical white paper documenting the research model.
 
-PopiSiege sends concurrent CF7 form submissions through rotating proxies to measure:
-- PHP worker pool exhaustion threshold
-- WAF (Wordfence/Cloudflare) rate limiting effectiveness
-- CDN cache bypass behaviour (`cf-cache-status: DYNAMIC`)
-- Server availability under concurrent load
+## Responsible use
 
-**Key finding:** CF7 REST API (`/wp-json/contact-form-7/v1/feedback`) always bypasses Cloudflare CDN cache — every POST hits the origin server directly, regardless of Cloudflare being in front.
+Use PopiSiege only on infrastructure you own or have explicit written
+authorization to test. Do not run this against third-party sites, public
+targets, customer systems, or any service where you do not control the scope.
 
----
+Recommended lab controls:
+
+- Start with very low concurrency.
+- Run during a maintenance window.
+- Watch PHP-FPM or LiteSpeed worker usage.
+- Watch WAF, CDN, access, and error logs.
+- Stop immediately when availability degrades.
+- Document the test window and approval.
+
+## Repository contents
+
+| File | Purpose |
+| --- | --- |
+| `popisiege.py` | Contact Form 7 feedback endpoint pressure test with rotating proxies. |
+| `search_flood.py` | WordPress search endpoint pressure test using randomized search terms. |
+| `proxy_tester.py` | Fetches public proxy lists, tests them, and writes working proxies. |
+| `proxy_pool.py` | Shared proxy source definitions. |
+| `install.sh` | Installs global `popisiege` and `search-flood` launchers. |
+| `whitepaper.md` | Technical research paper and mitigation notes. |
+| `requirements.txt` | Python dependencies. |
 
 ## Install
+
+Local install:
 
 ```bash
 git clone https://github.com/orospor/PopiSiege.git
 cd PopiSiege
-pip3 install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
----
+Global command install:
 
-## Quick Start
+```bash
+curl -sSL https://raw.githubusercontent.com/orospor/PopiSiege/main/install.sh | sudo bash
+```
 
-**Step 1 — Get working proxies:**
+This creates:
+
+```bash
+popisiege
+search-flood
+```
+
+## Prepare proxies
+
+PopiSiege expects a proxy file for rotating requests. Generate one first:
+
 ```bash
 python3 proxy_tester.py
 ```
 
-**Step 2 — Run the test:**
+Useful options:
+
+```bash
+python3 proxy_tester.py --output /tmp/working_proxies.txt
+python3 proxy_tester.py --workers 300 --timeout 10
+```
+
+Then pass that file to the test command:
+
+```bash
+python3 popisiege.py --proxy-file /tmp/working_proxies.txt
+```
+
+## Contact Form 7 test
+
+`popisiege.py` submits multipart Contact Form 7 feedback requests through a
+rotating proxy pool and reports availability, response time, HTTP status, cache
+headers, and proxy health.
+
+Run with the built-in lab profile:
+
 ```bash
 python3 popisiege.py
 ```
 
-Press `Ctrl+C` to stop. Final report prints automatically.
-
----
-
-## Usage
+Common options:
 
 ```bash
-# Default target (metoo-shatkin.com), auto concurrency
-python3 popisiege.py
-
-# Different target
-python3 popisiege.py --target metoo-buffalo.com
-
-# Custom concurrency
-python3 popisiege.py --concurrency 30
-
-# Verbose — see every request + proxy used
-python3 popisiege.py --verbose
-
-# Delay between bursts (seconds)
+python3 popisiege.py --concurrency 10
 python3 popisiege.py --delay 1
-
-# Custom proxy file
-python3 popisiege.py --proxy-file /path/to/proxies.txt
-
-# Full example
-python3 popisiege.py --target metoo-buffalo.com --concurrency 25 --verbose
+python3 popisiege.py --verbose
+python3 popisiege.py --proxy-file /tmp/working_proxies.txt
 ```
 
----
+To test your own authorized environment, update the `TARGETS` map in
+`popisiege.py` with your domain, Contact Form 7 feedback URL, form ID, unit tag,
+and safe starting threshold.
 
-## Proxy Tester
+## WordPress search test
 
-Fetches from 3 public proxy sources, tests all in parallel, saves working ones:
+`search_flood.py` sends randomized WordPress search requests through the proxy
+pool. This is useful for checking whether search pages are cached, rate limited,
+or passed directly to PHP and the database.
 
 ```bash
-python3 proxy_tester.py
-python3 proxy_tester.py --output /tmp/proxies.txt --workers 300 --timeout 10
+python3 search_flood.py --target example.com --concurrency 10 --delay 1
+python3 search_flood.py --target example.com --verbose
 ```
 
----
+Global launcher:
 
-## How It Works
-
-```
-Attacker (proxy pool)
-    │
-    ├── Proxy 1 ──► POST /wp-json/cf7/.../feedback ──► Cloudflare ──► LiteSpeed ──► PHP Worker 1
-    ├── Proxy 2 ──► POST /wp-json/cf7/.../feedback ──► Cloudflare ──► LiteSpeed ──► PHP Worker 2
-    ├── ...
-    └── Proxy N ──► POST /wp-json/cf7/.../feedback ──► Cloudflare ──► LiteSpeed ──► PHP Worker N (FULL)
-                                                                                     ↓
-                                                                               Queue overflow
-                                                                               522/524 errors
-                                                                               Site degraded
+```bash
+search-flood --target example.com --concurrency 10 --delay 1
 ```
 
-- `cf-cache-status: DYNAMIC` — Cloudflare never caches POST requests, always forwards to origin
-- Each CF7 submission occupies a PHP worker for ~1.2s minimum
-- At 19+ concurrent → worker pool exhausted → legitimate users get 522/524
+## Reading the output
 
----
+PopiSiege reports:
 
-## Key Research Findings
+- `OK`: responses counted as successful for that burst
+- `Avail`: percentage of successful responses
+- `Avg`: average response time
+- `Status`: simple stable, degraded, or down classification
+- `Proxies alive`: remaining proxies not marked dead
+- `cf-cache-status`: whether Cloudflare served or bypassed cache
 
-| Finding | Value |
-|---------|-------|
-| PHP worker limit (metoo-shatkin.com) | 19 workers |
-| Body size limit | 8.00 MB (400 error), 7.99 MB (200 OK) |
-| Minimum attack payload | 167 bytes — plain CF7 form, no file |
-| Wordfence block page size | 7.2 KB vs 200 byte success response |
-| Amplification ratio | ~35,000:1 (input bytes : server processing cost) |
-| reCAPTCHA protection | Email only — PHP worker still occupied regardless |
-| CDN cache status | DYNAMIC on every POST — always hits origin |
+For defensive testing, compare the tool output with:
 
----
+- CDN cache and rate-limit logs
+- WAF challenge/block logs
+- Web server access and error logs
+- PHP-FPM or LiteSpeed worker metrics
+- Database CPU and slow query logs
 
-## The Fix
+## Defensive findings to validate
 
-**Cloudflare Rate Limiting Rule:**
+Use the toolkit to answer practical questions:
+
+- Does the WAF rate-limit Contact Form 7 feedback POST requests?
+- Do POST requests always reach origin PHP?
+- How many concurrent PHP workers are available?
+- Does search traffic bypass page cache?
+- Do bot rules catch browser-like automated clients?
+- What response codes appear before users see timeouts?
+
+## Mitigation checklist
+
+- Add CDN/WAF rate limits for Contact Form 7 feedback POST paths.
+- Disable unused Contact Form 7 REST endpoints where possible.
+- Add server-side per-IP throttling for form submissions.
+- Cap upload sizes before PHP work begins.
+- Cache or restrict expensive search routes.
+- Monitor PHP worker saturation and queue depth.
+- Keep WordPress, plugins, WAF rules, and bot controls current.
+
+## White paper
+
+Read the full research write-up:
+
+```bash
+whitepaper.md
 ```
-Field:    URI Path contains /wp-json/contact-form-7
-AND
-Field:    Request Method equals POST
 
-Action:   Block
-Rate:     5 requests per 10 seconds per IP
+On GitHub:
+
+```text
+https://github.com/orospor/PopiSiege/blob/main/whitepaper.md
 ```
 
-This stops the attack at Cloudflare's edge — PHP never loads, zero origin cost.
+## License
 
----
-
-## Disclosure
-
-Discovered during security research — June 2026  
-Affects: WordPress + Contact Form 7 v6.1.6 + LiteSpeed + Cloudflare stack  
-Status: Pending responsible disclosure to CF7 team, Wordfence, Cloudflare
+Use this project responsibly under the license terms published in this
+repository.
