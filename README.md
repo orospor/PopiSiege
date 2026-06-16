@@ -179,6 +179,10 @@ On GitHub:
 https://github.com/orospor/PopiSiege/blob/main/whitepaper.md
 ```
 
+## Orospor Labs
+
+More projects and updates: [Orospor](https://orospor.com).
+
 ## License
 
 Use this project responsibly under the license terms published in this
