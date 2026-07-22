@@ -8,7 +8,8 @@ Install: pip3 install requests
 Run:     python3 vps_burst.py
 """
 
-import requests, threading, itertools, time, sys, os
+import requests, threading, itertools, time, sys, os, urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
