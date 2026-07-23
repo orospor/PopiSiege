@@ -8,7 +8,7 @@ Install: pip3 install requests
 Run:     python3 get_burst.py
 """
 
-import requests, threading, itertools, time, sys, urllib3, random, os
+import requests, threading, itertools, time, sys, urllib3, random, os, argparse
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -21,9 +21,15 @@ if not PROXY_USER or not PROXY_PASS:
     print("  export PROXY_PASS=your_password")
     sys.exit(1)
 
-BASE    = "https://metoo-shatkin.com"
-CONC    = 50
-TIMEOUT = 20
+ap = argparse.ArgumentParser()
+ap.add_argument("--target",      default="https://metoo-shatkin.com")
+ap.add_argument("--concurrency", type=int, default=50)
+ap.add_argument("--timeout",     type=int, default=20)
+args = ap.parse_args()
+
+BASE    = args.target.rstrip("/")
+CONC    = args.concurrency
+TIMEOUT = args.timeout
 
 TARGETS = [
     BASE + "/wp-json/wp/v2/posts?per_page=100",
