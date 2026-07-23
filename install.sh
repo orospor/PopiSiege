@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # PopiSiege Global Installer
-# Usage: curl -sSL https://raw.githubusercontent.com/orospor/PopiSiege/main/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/orospor/PopiSiege/main/install.sh | sudo bash
 
 set -e
 
 INSTALL_DIR="/opt/popisiege"
 BIN_POPI="/usr/local/bin/popisiege"
 BIN_SEARCH="/usr/local/bin/search-flood"
+BIN_GET="/usr/local/bin/get-burst"
+BIN_VPS="/usr/local/bin/vps-burst"
 
 echo ""
 echo "=============================="
@@ -43,6 +45,18 @@ python3 /opt/popisiege/search_flood.py "\$@"
 EOF
 chmod +x "$BIN_SEARCH"
 
+cat > "$BIN_GET" << EOF
+#!/usr/bin/env bash
+python3 /opt/popisiege/get_burst.py "\$@"
+EOF
+chmod +x "$BIN_GET"
+
+cat > "$BIN_VPS" << EOF
+#!/usr/bin/env bash
+python3 /opt/popisiege/vps_burst.py "\$@"
+EOF
+chmod +x "$BIN_VPS"
+
 echo ""
 echo "=============================="
 echo "  Done."
@@ -58,7 +72,13 @@ echo "    search-flood"
 echo "    search-flood --target metoo-buffalo.com"
 echo "    search-flood --concurrency 80"
 echo ""
-echo "  Both tools:"
+echo "  REST API POST Burst:"
+echo "    vps-burst"
+echo ""
+echo "  REST API GET Flood:"
+echo "    get-burst"
+echo ""
+echo "  All tools:"
 echo "    --verbose        show every request"
 echo "    --delay 1        pause between bursts"
 echo "    --proxy-file     custom proxy list"

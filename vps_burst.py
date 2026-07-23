@@ -32,7 +32,7 @@ HEADERS = {
     "Referer":           "https://metoo-shatkin.com/",
 }
 
-# 79 CF-bypassing residential proxies — user:pass auth (tested 2026-07-22)
+# 79 CF-bypassing residential proxies — IP auth (tested 2026-07-22)
 PROXIES = [
     "64.64.127.48:6001","45.150.23.220:6690","161.123.5.98:5147","191.96.130.89:5852",
     "199.180.9.155:6175","136.0.120.90:6108","206.206.124.108:6689","146.103.5.57:6637",
