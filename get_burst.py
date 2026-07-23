@@ -8,10 +8,18 @@ Install: pip3 install requests
 Run:     python3 get_burst.py
 """
 
-import requests, threading, itertools, time, sys, urllib3, random
+import requests, threading, itertools, time, sys, urllib3, random, os
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+
+PROXY_USER = os.environ.get("PROXY_USER", "")
+PROXY_PASS = os.environ.get("PROXY_PASS", "")
+if not PROXY_USER or not PROXY_PASS:
+    print("ERROR: set PROXY_USER and PROXY_PASS environment variables")
+    print("  export PROXY_USER=your_username")
+    print("  export PROXY_PASS=your_password")
+    sys.exit(1)
 
 BASE    = "https://metoo-shatkin.com"
 CONC    = 50
@@ -40,7 +48,7 @@ HEADERS = {
     "Referer":         BASE + "/",
 }
 
-# 79 CF-bypassing residential proxies — IP auth (tested 2026-07-22)
+# 79 CF-bypassing residential proxies — user:pass auth via env vars PROXY_USER / PROXY_PASS
 PROXIES = [
     "64.64.127.48:6001","45.150.23.220:6690","161.123.5.98:5147","191.96.130.89:5852",
     "199.180.9.155:6175","136.0.120.90:6108","206.206.124.108:6689","146.103.5.57:6637",
@@ -65,7 +73,7 @@ PROXIES = [
 ]
 
 target_cycle = itertools.cycle(TARGETS)
-proxy_cycle  = itertools.cycle([f"http://{p}" for p in PROXIES])
+proxy_cycle  = itertools.cycle([f"http://{PROXY_USER}:{PROXY_PASS}@{p}" for p in PROXIES])
 lock = threading.Lock()
 
 def next_pair():
