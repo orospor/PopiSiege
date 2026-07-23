@@ -47,7 +47,7 @@ chmod +x "$BIN_SEARCH"
 
 cat > "$BIN_GET" << EOF
 #!/usr/bin/env bash
-python3 /opt/popisiege/get_burst.py "\$@"
+sudo python3 /opt/popisiege/get_burst.py "\$@"
 EOF
 chmod +x "$BIN_GET"
 
