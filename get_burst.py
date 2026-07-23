@@ -35,9 +35,9 @@ TARGETS = [
     BASE + "/wp-json/wp/v2/posts?per_page=100",
     BASE + "/wp-json/wp/v2/media?per_page=100",
     BASE + "/wp-json/wp/v2/comments?per_page=100",
-    BASE + "/feed/",
     BASE + "/wp-json/wp/v2/posts?per_page=100&page=2",
     BASE + "/wp-json/wp/v2/posts?per_page=100&_embed=1",
+    BASE + "/wp-json/wp/v2/media?per_page=100&page=2",
 ]
 
 HEADERS = {
