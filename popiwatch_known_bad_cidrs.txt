@@ -1,0 +1,7 @@
+# Known-bad IP ranges to block on sight, one CIDR or single IP per line.
+# Populate this with confirmed attacker infrastructure — e.g. the Webshare
+# proxy ranges confirmed as the source of the CF7 flood. Matches here are
+# blocked immediately regardless of request rate.
+#
+# Example:
+# 45.150.23.0/24

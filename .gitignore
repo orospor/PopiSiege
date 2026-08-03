@@ -11,3 +11,6 @@ __pycache__/
 # only files with a _creds/_auth suffix (or similar local exports) are excluded here.
 *_creds.txt
 .env
+
+# popiwatch runtime state — regenerated on each host, not code
+popiwatch_blocked.json

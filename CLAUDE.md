@@ -73,6 +73,17 @@ Defined in `popisiege.py:TARGETS` dict:
 - Free datacenter proxies bypass Wordfence IP bans but not Cloudflare's TLS/bot check.
 - Authenticated proxies (Webshare) load from a `host:port`-only file (e.g. `proxies_webshare.txt`) with credentials supplied via `PROXY_USER`/`PROXY_PASS` env vars — never commit a proxy file with embedded credentials.
 - No file-upload attack surface was found on metoo-shatkin.com: the single CF7 form (id=50) declares no file field, and Cloudflare's WAF separately blocks `.php`-named multipart parts by content signature regardless of TLS fingerprint.
+- `popisiege.py` rotates across `BROWSER_PROFILES` (real, current Chrome/Firefox/Safari/Edge builds, TLS+UA matched) instead of one fixed impersonation target — UA content itself was tested and found to not matter for detection here (an ancient 2015-era UA paired with a modern TLS fingerprint passed fine), so the profile pool exists for realism/resilience against other WAFs, not because this site checks it.
+
+## popiwatch.py — origin-level defense (Cloudflare-independent)
+
+`popiwatch.py` tails the origin web server's access log directly and blocks via `iptables`, so protection holds even if Cloudflare is bypassed, misconfigured, or disabled. It does NOT call the Cloudflare API — it acts at the OS firewall level on the origin box.
+
+**Critical prerequisite:** the log's IP field must be the real visitor IP (via `CF-Connecting-IP`), not Cloudflare's edge IP — otherwise blocking is either a no-op or blocks Cloudflare's shared edge IPs outright. Verify the origin web server's log format before enabling `--live`.
+
+Detection rules (`Fingerprinter.evaluate`): known-bad CIDR match, naive library User-Agent on a sensitive path, empty UA on a sensitive path, per-IP burst rate on sensitive paths, and same-UA-many-IPs (the signature of a rotating-proxy tool — this is what would have caught our own popisiege.py test traffic).
+
+Defaults to dry-run (logs what it would do). `--live` requires root and actually runs `iptables -I INPUT -s <ip> -j DROP`, with auto-expiry after `--block-minutes` (default 60) tracked in `popiwatch_blocked.json`. Populate `popiwatch_allowlist.txt` (never-block) and `popiwatch_known_bad_cidrs.txt` (always-block, e.g. confirmed Webshare ranges) before running live.
 
 ### Attack flow
 ```

@@ -1,0 +1,8 @@
+# IPs/CIDRs that popiwatch will NEVER block, one per line.
+# Put your own IP here, your VPS's own IP, and Cloudflare's IP ranges if the
+# origin log ever shows Cloudflare's edge IP instead of the real visitor IP
+# (see the CF-Connecting-IP note at the top of popiwatch.py).
+#
+# Example:
+# 203.0.113.7
+# 203.0.113.0/24

