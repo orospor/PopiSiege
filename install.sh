@@ -9,6 +9,7 @@ BIN_POPI="/usr/local/bin/popisiege"
 BIN_SEARCH="/usr/local/bin/search-flood"
 BIN_GET="/usr/local/bin/get-burst"
 BIN_VPS="/usr/local/bin/vps-burst"
+BIN_WATCH="/usr/local/bin/popiwatch"
 
 echo ""
 echo "=============================="
@@ -57,6 +58,12 @@ python3 /opt/popisiege/vps_burst.py "\$@"
 EOF
 chmod +x "$BIN_VPS"
 
+cat > "$BIN_WATCH" << EOF
+#!/usr/bin/env bash
+python3 /opt/popisiege/popiwatch.py "\$@"
+EOF
+chmod +x "$BIN_WATCH"
+
 echo ""
 echo "=============================="
 echo "  Done."
@@ -77,6 +84,10 @@ echo "    vps-burst"
 echo ""
 echo "  REST API GET Flood:"
 echo "    get-burst"
+echo ""
+echo "  Origin-level defense (Cloudflare-independent, dry-run by default):"
+echo "    popiwatch --log /path/to/access.log"
+echo "    sudo popiwatch --log /path/to/access.log --live    # actually blocks via iptables"
 echo ""
 echo "  All tools:"
 echo "    --verbose        show every request"
