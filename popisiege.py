@@ -47,12 +47,20 @@ BROWSER_PROFILES = [
     ("chrome145", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"),
     ("chrome146", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"),
     ("chrome131_android", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"),
+    ("chrome99_android", "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.88 Mobile Safari/537.36"),
+    ("chrome123", "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"),
+    ("chrome119", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"),
+    ("chrome110", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"),
     ("edge101", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36 Edg/101.0.1210.53"),
+    ("edge99", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36 Edg/99.0.1150.30"),
     ("safari184", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15"),
     ("safari184_ios", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1"),
+    ("safari180_ios", "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"),
+    ("safari170", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"),
     ("firefox135", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"),
     ("firefox144", "Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0"),
     ("firefox147", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:147.0) Gecko/20100101 Firefox/147.0"),
+    ("firefox133", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"),
 ]
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -73,6 +81,26 @@ TARGETS = {
         "threshold": 25,
     },
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  BROWSER PROFILE CYCLE — round-robin like ProxyPool, so a single burst never
+#  repeats a profile until the whole pool is exhausted (random.choice could
+#  pick the same one twice by chance; this guarantees it doesn't).
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ProfileCycle:
+    def __init__(self, profiles):
+        self.profiles = profiles
+        self._cycle = itertools.cycle(profiles)
+        self._lock  = threading.Lock()
+
+    def next(self):
+        with self._lock:
+            return next(self._cycle)
+
+
+PROFILE_CYCLE = ProfileCycle(BROWSER_PROFILES)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -181,7 +209,7 @@ def send_one(req_num, cfg, pool):
 
     domain = cfg["url"].split("/")[2]
     label  = proxy if proxy else "direct (own IP)"
-    impersonate, ua = random.choice(BROWSER_PROFILES)
+    impersonate, ua = PROFILE_CYCLE.next()
 
     t0 = time.time()
     try:
