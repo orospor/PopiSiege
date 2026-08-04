@@ -36,7 +36,7 @@ echo "[*] Creating global commands..."
 
 cat > "$BIN_POPI" << EOF
 #!/usr/bin/env bash
-python3 /opt/popisiege/popisiege.py "\$@"
+sudo PROXY_USER="\$PROXY_USER" PROXY_PASS="\$PROXY_PASS" python3 /opt/popisiege/popisiege.py "\$@"
 EOF
 chmod +x "$BIN_POPI"
 
