@@ -205,7 +205,7 @@ def send_one(req_num, cfg, pool):
     if pool is not None:
         proxy = pool.next()
         if not proxy:
-            return req_num, 0, 0, "N/A", "none", "all proxies dead"
+            return req_num, 0, 0, "N/A", "none", "all proxies dead", "N/A"
 
     domain = cfg["url"].split("/")[2]
     label  = proxy if proxy else "direct (own IP)"
@@ -226,12 +226,12 @@ def send_one(req_num, cfg, pool):
         mit     = r.headers.get("cf-mitigated", "")
         # cf-mitigated present = Cloudflare intercepted, not the origin
         code    = r.status_code if not mit else 999
-        return req_num, code, elapsed, cache, label, (f"cf-mitigated={mit}" if mit else None)
+        return req_num, code, elapsed, cache, label, (f"cf-mitigated={mit}" if mit else None), impersonate
     except Exception as e:
         elapsed = time.time() - t0
         if pool is not None:
             pool.mark_dead(proxy)
-        return req_num, 0, elapsed, "N/A", label, str(e)[:40]
+        return req_num, 0, elapsed, "N/A", label, str(e)[:40], impersonate
 
 
 def send_one_direct(req_num, cfg, origin_ip):
@@ -414,7 +414,7 @@ def burst(concurrency, cfg, pool, verbose):
     with ThreadPoolExecutor(max_workers=concurrency) as ex:
         futures = [ex.submit(send_one, i, cfg, pool) for i in range(1, concurrency+1)]
         for f in as_completed(futures):
-            num, code, elapsed, cache, proxy, error = f.result()
+            num, code, elapsed, cache, proxy, error, profile = f.result()
             short = proxy.replace("http://","").replace("https://","")[:22]
             if code == 200:
                 ok.append(code); times.append(elapsed)
@@ -422,7 +422,7 @@ def burst(concurrency, cfg, pool, verbose):
                 err.append(code)
             if verbose:
                 sym = G+"[✓]"+W if code==200 else R+"[✗]"+W
-                detail = f"HTTP={code or 'ERR':<3} | Time={elapsed:.2f}s | Cache={cache}"
+                detail = f"HTTP={code or 'ERR':<3} | Time={elapsed:.2f}s | Cache={cache} | Profile={profile}"
                 if error: detail += f" | {error}"
                 print(f"    {sym} Req {num:>3} | {short:<22} | {detail}")
     return ok, err, times
