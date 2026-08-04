@@ -203,33 +203,71 @@ class ProxyPool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  PAYLOAD
+#  PAYLOAD — randomized per request. Identical form content (same name/email/
+#  message on every submission) is itself a signature an app-level anti-spam
+#  or WAF content filter can key on, independent of IP/TLS/UA.
 # ─────────────────────────────────────────────────────────────────────────────
 
+_FIRST_NAMES = ["James","Mary","Robert","Patricia","John","Jennifer","Michael","Linda",
+                "David","Elizabeth","William","Barbara","Richard","Susan","Joseph","Jessica",
+                "Thomas","Sarah","Charles","Karen","Daniel","Nancy","Matthew","Lisa",
+                "Anthony","Betty","Mark","Margaret","Donald","Sandra","Steven","Ashley"]
+_LAST_NAMES  = ["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis",
+                "Rodriguez","Martinez","Hernandez","Lopez","Wilson","Anderson","Thomas","Taylor",
+                "Moore","Jackson","Martin","Lee","Perez","Thompson","White","Harris"]
+_EMAIL_DOMAINS = ["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.com","aol.com","protonmail.com"]
+_SUBJECTS = ["Question about your services","Inquiry","Contact request","Need some information",
+             "Quick question","Following up","Reaching out","General inquiry","Request for info","Hello"]
+_MESSAGE_TEMPLATES = [
+    "Hi, I wanted to reach out and ask a few questions. Could you get back to me when you have a moment?",
+    "Hello, I came across your site and had a question. Please let me know if you can help.",
+    "Hi there, I'm interested in learning more. Looking forward to your response.",
+    "Good day, I have a quick question and would appreciate a reply when convenient.",
+    "Hello, just reaching out to see if you could provide some additional details. Thanks!",
+    "Hi, I'd like more information on this. Let me know the best way to follow up.",
+    "Hello, hoping to get in touch regarding a question I had. Thanks in advance.",
+    "Hi, wanted to check in and ask something. Appreciate any info you can share.",
+]
+
+def random_payload_fields():
+    first = random.choice(_FIRST_NAMES)
+    last  = random.choice(_LAST_NAMES)
+    name  = f"{first} {last}"
+    email = f"{first.lower()}.{last.lower()}{random.randint(1,9999)}@{random.choice(_EMAIL_DOMAINS)}"
+    return {
+        "name":    name,
+        "email":   email,
+        "subject": random.choice(_SUBJECTS),
+        "message": random.choice(_MESSAGE_TEMPLATES),
+    }
+
+
 def build_files(form_id, unit_tag):
+    f = random_payload_fields()
     return {
         "_wpcf7":          (None, form_id),
         "_wpcf7_version":  (None, "6.1.6"),
         "_wpcf7_locale":   (None, "en_US"),
         "_wpcf7_unit_tag": (None, unit_tag),
-        "your-name":       (None, "Test User"),
-        "your-email":      (None, "test@test.com"),
-        "your-subject":    (None, "Test"),
-        "your-message":    (None, "Hello"),
+        "your-name":       (None, f["name"]),
+        "your-email":      (None, f["email"]),
+        "your-subject":    (None, f["subject"]),
+        "your-message":    (None, f["message"]),
     }
 
 
 def build_multipart(form_id, unit_tag):
     """curl_cffi needs CurlMime, not the requests-style files dict."""
+    f = random_payload_fields()
     mp = CurlMime()
     mp.addpart(name="_wpcf7", data=form_id)
     mp.addpart(name="_wpcf7_version", data="6.1.6")
     mp.addpart(name="_wpcf7_locale", data="en_US")
     mp.addpart(name="_wpcf7_unit_tag", data=unit_tag)
-    mp.addpart(name="your-name", data="Test User")
-    mp.addpart(name="your-email", data="test@test.com")
-    mp.addpart(name="your-subject", data="Test")
-    mp.addpart(name="your-message", data="Hello")
+    mp.addpart(name="your-name", data=f["name"])
+    mp.addpart(name="your-email", data=f["email"])
+    mp.addpart(name="your-subject", data=f["subject"])
+    mp.addpart(name="your-message", data=f["message"])
     return mp
 
 
