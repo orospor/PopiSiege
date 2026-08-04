@@ -11,6 +11,7 @@ BIN_GET="/usr/local/bin/get-burst"
 BIN_VPS="/usr/local/bin/vps-burst"
 BIN_WATCH="/usr/local/bin/popiwatch"
 BIN_CF="/usr/local/bin/popicf"
+BIN_T1="/usr/local/bin/popitest1"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
@@ -82,6 +83,14 @@ sudo python3 /opt/popisiege/popisiege.py --concurrency 19 --verbose --proxy-file
 EOF
 chmod +x "$BIN_CF"
 
+# popitest1 — baseline control: no IP rotation (this machine's own IP), no
+# UA rotation (one fixed profile). Cleanest run to diff against a rotating one.
+cat > "$BIN_T1" << EOF
+#!/usr/bin/env bash
+python3 /opt/popisiege/popitest1.py "\$@"
+EOF
+chmod +x "$BIN_T1"
+
 echo ""
 echo "=============================="
 echo "  Done."
@@ -111,6 +120,11 @@ echo "  Webshare backbone connection, one-word launcher:"
 echo "    popicf"
 echo "    (needs $BACKBONE_CREDS to exist first — create it once from your"
 echo "     Webshare backbone proxy list export, gitignored, never committed)"
+echo ""
+echo "  Baseline control — no IP rotation, no UA rotation:"
+echo "    popitest1"
+echo "    popitest1 --concurrency 10 --verbose"
+echo "    popitest1 --profile firefox147   # hold a different single profile fixed"
 echo ""
 echo "  All tools:"
 echo "    --verbose        show every request"
