@@ -10,6 +10,8 @@ BIN_SEARCH="/usr/local/bin/search-flood"
 BIN_GET="/usr/local/bin/get-burst"
 BIN_VPS="/usr/local/bin/vps-burst"
 BIN_WATCH="/usr/local/bin/popiwatch"
+BIN_CF="/usr/local/bin/popicf"
+BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
 echo "=============================="
@@ -64,6 +66,22 @@ python3 /opt/popisiege/popiwatch.py "\$@"
 EOF
 chmod +x "$BIN_WATCH"
 
+# popicf — one-word launcher for the Webshare backbone-connection setup.
+# The creds file is deliberately NOT embedded in this script (it would land
+# in git otherwise) — it must already exist at $BACKBONE_CREDS, created once
+# per machine from your Webshare backbone proxy list export.
+cat > "$BIN_CF" << EOF
+#!/usr/bin/env bash
+CREDS="$BACKBONE_CREDS"
+if [ ! -s "\$CREDS" ]; then
+    echo "Missing or empty \$CREDS"
+    echo "Create it once with your Webshare backbone list (p.webshare.io:80:user-N:pass per line), then rerun."
+    exit 1
+fi
+sudo python3 /opt/popisiege/popisiege.py --concurrency 19 --verbose --proxy-file "\$CREDS" "\$@"
+EOF
+chmod +x "$BIN_CF"
+
 echo ""
 echo "=============================="
 echo "  Done."
@@ -88,6 +106,11 @@ echo ""
 echo "  Origin-level defense (Cloudflare-independent, dry-run by default):"
 echo "    popiwatch --log /path/to/access.log"
 echo "    sudo popiwatch --log /path/to/access.log --live    # actually blocks via iptables"
+echo ""
+echo "  Webshare backbone connection, one-word launcher:"
+echo "    popicf"
+echo "    (needs $BACKBONE_CREDS to exist first — create it once from your"
+echo "     Webshare backbone proxy list export, gitignored, never committed)"
 echo ""
 echo "  All tools:"
 echo "    --verbose        show every request"
