@@ -4,6 +4,7 @@ __pycache__/
 .DS_Store
 /tmp/
 *.log
+!logs/*.log
 # working_proxies.txt
 
 # Any proxy list with embedded user:pass — never commit credentials.

@@ -12,6 +12,7 @@ BIN_VPS="/usr/local/bin/vps-burst"
 BIN_WATCH="/usr/local/bin/popiwatch"
 BIN_CF="/usr/local/bin/popicf"
 BIN_T1="/usr/local/bin/popitest1"
+BIN_SYN="/usr/local/bin/syntest"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
@@ -91,6 +92,12 @@ python3 /opt/popisiege/popitest1.py "\$@"
 EOF
 chmod +x "$BIN_T1"
 
+cat > "$BIN_SYN" << EOF
+#!/usr/bin/env bash
+sudo python3 /opt/popisiege/syntest.py "\$@"
+EOF
+chmod +x "$BIN_SYN"
+
 echo ""
 echo "=============================="
 echo "  Done."
@@ -125,6 +132,11 @@ echo "  Baseline control — no IP rotation, no UA rotation:"
 echo "    popitest1"
 echo "    popitest1 --concurrency 10 --verbose"
 echo "    popitest1 --profile firefox147   # hold a different single profile fixed"
+echo ""
+echo "  SYN flood + service degradation monitor:"
+echo "    syntest --target <IP> --port 22 --rate 1000 --duration 30"
+echo "    syntest --target <IP> --port 22,80,443 --http-probe https://example.com/"
+echo "    (logs saved to logs/ directory automatically)"
 echo ""
 echo "  All tools:"
 echo "    --verbose        show every request"
