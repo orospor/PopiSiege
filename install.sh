@@ -33,11 +33,13 @@ fi
 
 # install tor
 echo "[*] Installing Tor..."
-apt-get install -y tor -qq 2>/dev/null || true
-if ! grep -q "^ControlPort" /etc/tor/torrc 2>/dev/null; then
+apt-get update -qq
+apt-get install -y tor
+if ! grep -q "^ControlPort" /etc/tor/torrc; then
     printf '\nControlPort 9051\nCookieAuthentication 0\n' >> /etc/tor/torrc
-    systemctl restart tor 2>/dev/null || true
 fi
+systemctl restart tor
+sleep 2
 touch "$INSTALL_DIR/use_tor"
 
 # install python deps
