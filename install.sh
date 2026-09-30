@@ -45,6 +45,7 @@ touch "$INSTALL_DIR/use_tor"
 
 # install python deps
 echo "[*] Installing Python dependencies..."
+apt-get install -y -q python3-pip python3-dev
 pip3 install -r "$INSTALL_DIR/requirements.txt" -q --break-system-packages 2>/dev/null \
     || pip3 install -r "$INSTALL_DIR/requirements.txt" -q
 
