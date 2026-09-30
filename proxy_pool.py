@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
 Shared ProxyPool — used by popisiege.py and search_flood.py
-  - 12 GitHub proxy sources
-  - Auto-refresh in background when alive drops below 50%
+  - 12 GitHub proxy sources (free)
+  - Webshare backbone rotating proxy (if proxies_webshare_backbone_creds.txt present)
+  - Auto-refresh in background when alive drops below 50% (free mode only)
   - Thread-safe next() / mark_dead()
+
+Webshare creds file (gitignored): proxies_webshare_backbone_creds.txt
+  Line 1: username  (e.g. nxatttwl)
+  Line 2: password
 """
 
-import requests, itertools, threading, concurrent.futures, time
+import requests, itertools, threading, concurrent.futures, time, os
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"; W = "\033[0m"
 
@@ -179,3 +184,112 @@ class ProxyPool:
         finally:
             with self._lock:
                 self._refreshing = False
+
+
+# ── Webshare backbone rotating pool ───────────────────────────────────────
+# Single endpoint — Webshare rotates exit IP on every request automatically.
+# No dead-tracking needed; backbone is always available.
+
+class WebsharePool:
+    """
+    Drop-in replacement for ProxyPool using Webshare backbone.
+    Reads creds from proxies_webshare_backbone_creds.txt (gitignored).
+    """
+
+    CREDS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "proxies_webshare_backbone_creds.txt")
+    HOST       = "p.webshare.io"
+    PORT       = 80
+
+    def __init__(self):
+        user, pwd = self._load_creds()
+        # -rotate suffix tells Webshare to pick a fresh exit IP each connection
+        self._proxy = f"http://{user}-rotate:{pwd}@{self.HOST}:{self.PORT}"
+        print(f"  {G}[PROXY]{W} Webshare backbone — rotating residential IPs via {self.HOST}:{self.PORT}")
+
+    @classmethod
+    def _load_creds(cls):
+        with open(cls.CREDS_FILE) as f:
+            lines = [l.strip() for l in f if l.strip()]
+        if len(lines) < 2:
+            raise ValueError(f"{cls.CREDS_FILE}: need username on line 1, password on line 2")
+        return lines[0], lines[1]
+
+    @classmethod
+    def available(cls):
+        return os.path.exists(cls.CREDS_FILE)
+
+    def next(self):
+        return self._proxy
+
+    def mark_dead(self, _proxy):
+        pass  # backbone never dies — network errors are transient
+
+    def alive(self):
+        return 9999
+
+    def pct_alive(self):
+        return 100.0
+
+    def maybe_refresh(self):
+        pass  # nothing to refresh
+
+
+# ── Tor rotating pool ─────────────────────────────────────────────────────
+# Uses local Tor daemon (SOCKS5 on 127.0.0.1:9050).
+# Sends NEWNYM signal via ControlPort 9051 after every request to get a
+# fresh exit node — each request hits the target from a different IP.
+
+class TorPool:
+    SOCKS   = "socks5h://127.0.0.1:9050"   # h = DNS via Tor
+    CTRL    = ("127.0.0.1", 9051)
+    FLAG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "use_tor")
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._ctrl = None
+        try:
+            from stem.control import Controller
+            self._ctrl = Controller.from_port(address=self.CTRL[0], port=self.CTRL[1])
+            self._ctrl.authenticate()
+            print(f"  {G}[PROXY]{W} Tor — rotating exit node per request via NEWNYM")
+        except Exception as e:
+            print(f"  {Y}[PROXY]{W} Tor ControlPort unavailable ({e}) — circuit rotation disabled")
+
+    @classmethod
+    def available(cls):
+        return os.path.exists(cls.FLAG_FILE)
+
+    def next(self):
+        # Rotate circuit so next connection uses a new exit node
+        if self._ctrl:
+            try:
+                with self._lock:
+                    from stem import Signal
+                    self._ctrl.signal(Signal.NEWNYM)
+                    time.sleep(0.6)  # Tor needs ~0.5s to build new circuit
+            except Exception:
+                pass
+        return self.SOCKS
+
+    def mark_dead(self, _proxy):
+        pass
+
+    def alive(self):
+        return 9999
+
+    def pct_alive(self):
+        return 100.0
+
+    def maybe_refresh(self):
+        pass
+
+
+# ── auto-detect: Tor > Webshare > file-based pool ─────────────────────────
+
+def make_pool(proxy_file):
+    if TorPool.available():
+        return TorPool()
+    if WebsharePool.available():
+        return WebsharePool()
+    return ProxyPool(proxy_file)
