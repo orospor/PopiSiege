@@ -14,6 +14,7 @@ BIN_CF="/usr/local/bin/popicf"
 BIN_T1="/usr/local/bin/popitest1"
 BIN_SYN="/usr/local/bin/syntest"
 BIN_HOME="/usr/local/bin/popihome"
+BIN_XMLRPC="/usr/local/bin/xmlrpc-burst"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
@@ -124,6 +125,13 @@ fi
 sudo python3 /opt/popisiege/popisiege.py --concurrency 19 --verbose --proxy-file "\$CREDS" --homepage "\$@"
 EOF
 chmod +x "$BIN_HOME"
+
+cat > "$BIN_XMLRPC" << EOF
+#!/usr/bin/env bash
+cd /opt/popisiege
+exec python3 xmlrpc_burst.py "\$@"
+EOF
+chmod +x "$BIN_XMLRPC"
 
 echo ""
 echo "=============================="
