@@ -31,6 +31,15 @@ else
     git clone https://github.com/orospor/PopiSiege.git "$INSTALL_DIR"
 fi
 
+# install tor
+echo "[*] Installing Tor..."
+apt-get install -y tor -qq 2>/dev/null || true
+if ! grep -q "^ControlPort" /etc/tor/torrc 2>/dev/null; then
+    printf '\nControlPort 9051\nCookieAuthentication 0\n' >> /etc/tor/torrc
+    systemctl restart tor 2>/dev/null || true
+fi
+touch "$INSTALL_DIR/use_tor"
+
 # install python deps
 echo "[*] Installing Python dependencies..."
 pip3 install -r "$INSTALL_DIR/requirements.txt" -q --break-system-packages 2>/dev/null \
