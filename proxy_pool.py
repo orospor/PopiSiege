@@ -219,7 +219,7 @@ class WebsharePool:
     def available(cls):
         return os.path.exists(cls.CREDS_FILE)
 
-    def next(self):
+    def next(self, slot=None):
         return self._proxy
 
     def mark_dead(self, _proxy):
@@ -260,7 +260,7 @@ class TorPool:
     def available(cls):
         return os.path.exists(cls.FLAG_FILE)
 
-    def next(self):
+    def next(self, slot=None):
         # Rotate circuit so next connection uses a new exit node
         if self._ctrl:
             try:

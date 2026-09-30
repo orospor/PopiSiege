@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from curl_cffi import requests as cf_requests
 from curl_cffi import CurlMime
+from proxy_pool import make_pool
 
 # Chrome TLS/JA3 fingerprint to impersonate — plain `requests`/curl present a
 # distinct fingerprint that Cloudflare blocks even with a spoofed UA string.
@@ -645,7 +646,7 @@ def main():
         pool = None
     else:
         try:
-            pool = ProxyPool(args.proxy_file, rotate_interval=args.proxy_rotate_interval)
+            pool = make_pool(args.proxy_file)
         except FileNotFoundError:
             print(f"\n  {R}[ERROR]{W} Proxy file not found: {args.proxy_file}")
             print(f"  Run: python3 proxy_tester.py\n")
