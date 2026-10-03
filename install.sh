@@ -15,6 +15,7 @@ BIN_T1="/usr/local/bin/popitest1"
 BIN_SYN="/usr/local/bin/syntest"
 BIN_HOME="/usr/local/bin/popihome"
 BIN_XMLRPC="/usr/local/bin/xmlrpc-burst"
+BIN_UPLOAD="/usr/local/bin/upload-burst"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
@@ -133,6 +134,13 @@ cd /opt/popisiege
 exec python3 xmlrpc_burst.py "\$@"
 EOF
 chmod +x "$BIN_XMLRPC"
+
+cat > "$BIN_UPLOAD" << EOF
+#!/usr/bin/env bash
+cd /opt/popisiege
+exec python3 upload_burst.py "\$@"
+EOF
+chmod +x "$BIN_UPLOAD"
 
 echo ""
 echo "=============================="
