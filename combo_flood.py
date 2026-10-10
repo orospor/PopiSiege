@@ -89,14 +89,21 @@ def random_text(size_bytes):
 # ── upload worker ─────────────────────────────────────────────────────────────
 
 def _worker_held(code, err):
-    """A held/exhausted connection IS success — worker was pinned on server side."""
+    """
+    Any outcome except hard connection refused = server received our request.
+    Timeout / empty reply / reset = worker was pinned on server side = goal.
+    Only ECONNREFUSED / no route means server not listening at all.
+    """
+    if code and code > 0:
+        return True  # got any HTTP response = server is alive and processing
     if err:
-        # timeout or empty reply = server held connection = worker pinned
         e = err.lower()
-        return any(x in e for x in ("timed out", "timeout", "empty reply",
-                                    "connection reset", "remotedisconnect",
-                                    "remoteprotocol", "econnreset"))
-    return code in (200, 400, 500, 502, 503, 504)
+        # hard refusal = server not listening or proxy dead = not held
+        if any(x in e for x in ("connection refused", "no route", "proxy",
+                                 "socks", "name or service", "nodename")):
+            return False
+        return True  # timeout, reset, empty reply, etc = worker was held
+    return False
 
 
 def upload_worker(origin, port, host, form_id, size_mb, pool, stats, stop_evt):
