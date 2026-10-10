@@ -69,7 +69,8 @@ Defined in `popisiege.py:TARGETS` dict:
 - Cloudflare blocks `python-requests`/curl by **TLS fingerprint (JA3/JA4)**, not just UA string — a spoofed `User-Agent` header alone still gets `403` + `cf-mitigated: challenge`.
 - `popisiege.py` uses `curl_cffi` (`impersonate="chrome124"`) to present a real Chrome TLS handshake. This reaches the origin (`cf-cache-status: DYNAMIC`, `cf-mitigated` absent) where plain `requests` cannot.
 - Cloudflare **rate limiting** is a separate layer from the TLS/bot check and still applies: on metoo-shatkin.com it was observed kicking in after ~2 bursts (~10 requests in ~4s) and staying locked at `429` afterward. TLS impersonation defeats the bot-fingerprint gate, not rate limiting.
-- Cloudflare blocks all Tor exit IPs by category — Tor rotation does not work.
+- Cloudflare blocks all Tor exit IPs by category — Tor rotation does not work against CF-protected targets.
+- **Direct origin bypass (metoo-shatkin.com) — COVERED:** Origin IP `104.236.68.226` was exposed via SPF record (`v=spf1 a ip4:104.236.68.226 ~all`). Ports 80/443/8080 were confirmed open with no firewall, allowing CF7 POST directly to origin bypassing all CF rules. Fixed: DO Firewall applied, all three ports now return `000` (no connection). Attack vector closed.
 - Free datacenter proxies bypass Wordfence IP bans but not Cloudflare's TLS/bot check.
 - Authenticated proxies (Webshare) load from a `host:port`-only file (e.g. `proxies_webshare.txt`) with credentials supplied via `PROXY_USER`/`PROXY_PASS` env vars — never commit a proxy file with embedded credentials.
 - No file-upload attack surface was found on metoo-shatkin.com: the single CF7 form (id=50) declares no file field, and Cloudflare's WAF separately blocks `.php`-named multipart parts by content signature regardless of TLS fingerprint.
