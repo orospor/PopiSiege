@@ -252,7 +252,9 @@ class TorPool:
             from stem.control import Controller
             self._ctrl = Controller.from_port(address=self.CTRL[0], port=self.CTRL[1])
             self._ctrl.authenticate()
-            print(f"  {G}[PROXY]{W} Tor — rotating exit node per request via NEWNYM")
+            print(f"  {G}[PROXY]{W} Tor — NEWNYM every 10s (background), all workers share circuits")
+            t = threading.Thread(target=self._rotation_loop, daemon=True)
+            t.start()
         except Exception as e:
             print(f"  {Y}[PROXY]{W} Tor ControlPort unavailable ({e}) — circuit rotation disabled")
 
@@ -261,16 +263,21 @@ class TorPool:
         return os.path.exists(cls.FLAG_FILE)
 
     def next(self, slot=None):
-        # Rotate circuit so next connection uses a new exit node
-        if self._ctrl:
-            try:
-                with self._lock:
+        # High-concurrency mode: don't NEWNYM per request — that serializes all
+        # workers behind one lock. Tor multiplexes streams across existing circuits
+        # naturally; NEWNYM every 10s in background is enough for IP rotation.
+        return self.SOCKS
+
+    def _rotation_loop(self):
+        """Background thread: sends NEWNYM every 10s to rotate exit nodes."""
+        while True:
+            time.sleep(10)
+            if self._ctrl:
+                try:
                     from stem import Signal
                     self._ctrl.signal(Signal.NEWNYM)
-                    time.sleep(0.6)  # Tor needs ~0.5s to build new circuit
-            except Exception:
-                pass
-        return self.SOCKS
+                except Exception:
+                    pass
 
     def mark_dead(self, _proxy):
         pass

