@@ -90,19 +90,17 @@ def random_text(size_bytes):
 
 def _worker_held(code, err):
     """
-    Any outcome except hard connection refused = server received our request.
+    Any outcome except hard ECONNREFUSED = server received our request.
     Timeout / empty reply / reset = worker was pinned on server side = goal.
-    Only ECONNREFUSED / no route means server not listening at all.
     """
     if code and code > 0:
-        return True  # got any HTTP response = server is alive and processing
+        return True
     if err:
         e = err.lower()
-        # hard refusal = server not listening or proxy dead = not held
-        if any(x in e for x in ("connection refused", "no route", "proxy",
-                                 "socks", "name or service", "nodename")):
+        if any(x in e for x in ("connection refused", "no route to host",
+                                 "name or service not known", "nodename nor")):
             return False
-        return True  # timeout, reset, empty reply, etc = worker was held
+        return True  # timeout, reset, empty reply, socks relay, etc = held
     return False
 
 
@@ -198,12 +196,14 @@ def status_loop(stats, stop_evt, upload_w, search_w, size_mb):
         u_ok_pct = u["ok"] / u_total * 100 if u_total else 0
         s_ok_pct = s["ok"] / s_total * 100 if s_total else 0
 
-        if u_ok_pct >= 60:   u_st = G + "HOLDING" + W
-        elif u_ok_pct >= 20: u_st = Y + "PARTIAL" + W
+        if u_total == 0:      u_st = Y + "WAITING..." + W
+        elif u_ok_pct >= 60:  u_st = G + "HOLDING" + W
+        elif u_ok_pct >= 20:  u_st = Y + "PARTIAL" + W
         else:                 u_st = R + "BLOCKED/REFUSED" + W
 
-        if s_ok_pct >= 60:   s_st = G + "HOLDING" + W
-        elif s_ok_pct >= 20: s_st = Y + "PARTIAL" + W
+        if s_total == 0:      s_st = Y + "WAITING..." + W
+        elif s_ok_pct >= 60:  s_st = G + "HOLDING" + W
+        elif s_ok_pct >= 20:  s_st = Y + "PARTIAL" + W
         else:                 s_st = R + "BLOCKED/REFUSED" + W
 
         ts = datetime.now().strftime("%H:%M:%S")
