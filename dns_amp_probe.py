@@ -50,6 +50,18 @@ TEST_DOMAINS = [
     "google.com",
     "cloudflare.com",
     "isc.org",
+    "yahoo.com",
+    "gmail.com",
+    "amazon.com",
+    "microsoft.com",
+    "facebook.com",
+    "twitter.com",
+    "instagram.com",
+    "verisign.com",
+    "dnssec-tools.org",
+    "paypal.com",
+    "netflix.com",
+    "akamai.com",
 ]
 
 
