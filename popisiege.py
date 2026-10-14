@@ -786,7 +786,7 @@ def main():
     if all_times:
         print(f"  Avg resp time : {sum(all_times)/len(all_times):.2f}s")
         print(f"  Max resp time : {max(all_times):.2f}s")
-    if pool is not None:
+    if pool is not None and hasattr(pool, '_dead'):
         print(f"  Proxies dead  : {len(pool._dead)}/{len(pool.proxies)}")
     print(f"  RPS           : {total/runtime:.2f}" if runtime > 0 else "")
     print(f"{B}{'='*66}{W}\n")
