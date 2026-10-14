@@ -9,3 +9,5 @@ __pycache__/
 *.pem
 .env
 popiwatch_blocked.json
+proxies_ws_static_*.txt
+proxies_cf7_working.txt
