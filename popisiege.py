@@ -568,6 +568,9 @@ def main():
     p.add_argument("--no-proxy",    action="store_true",
                    help="Skip the proxy pool entirely — send every request from this\n"
                         "machine's own IP (still uses TLS impersonation).")
+    p.add_argument("--static-proxies", action="store_true",
+                   help="Force file-based proxy pool (bypasses backbone/Tor auto-detect).\n"
+                        "Use with --proxy-file to load specific IPs directly.")
     p.add_argument("--proxy-rotate-interval", type=float, default=0, metavar="SECONDS",
                    help="Hold one proxy fixed for SECONDS, then advance to the next,\n"
                         "instead of a new proxy every request (default: 0 = per-request).\n"
@@ -646,7 +649,10 @@ def main():
         pool = None
     else:
         try:
-            pool = make_pool(args.proxy_file)
+            if args.static_proxies:
+                pool = ProxyPool(args.proxy_file, rotate_interval=args.proxy_rotate_interval)
+            else:
+                pool = make_pool(args.proxy_file)
         except FileNotFoundError:
             print(f"\n  {R}[ERROR]{W} Proxy file not found: {args.proxy_file}")
             print(f"  Run: python3 proxy_tester.py\n")
@@ -758,7 +764,16 @@ def main():
             if pool is not None and pool.alive() == 0:
                 pool.refresh(args.proxy_file)
 
-            if args.delay > 0:
+            # Auto-backoff: when >60% of burst is blocked (429 rate-limit or
+            # 999 cf-mitigated challenge), CF window is saturated — pause to
+            # let token buckets partially refill before the next burst.
+            blocked = sum(1 for c in err if c in (429, 999))
+            if blocked > concurrency * 0.6:
+                sleep_t = 30
+                if args.verbose:
+                    print(f"  {Y}[BACKOFF]{W} {blocked}/{concurrency} blocked — sleeping {sleep_t}s\n")
+                time.sleep(sleep_t)
+            elif args.delay > 0:
                 time.sleep(args.delay)
 
     except KeyboardInterrupt:
