@@ -391,18 +391,24 @@ _EXTRA_FIELD_KEYS = [
     "company", "phone", "website", "city", "country", "zip-code",
     "how-did-you-hear", "budget", "timeline", "additional-notes",
     "preferred-contact", "availability", "project-type", "referral-source",
+    "industry", "team-size", "current-solution", "pain-points",
+    "decision-timeline", "stakeholders", "previous-vendors", "goals",
 ]
 _EXTRA_FIELD_VALUES = [
-    "Yes, please follow up at your earliest convenience.",
-    "Flexible — open to discussing options further.",
-    "Within the next 30 days ideally.",
-    "No strong preference, whatever works best for your team.",
-    "Happy to provide more details if needed.",
-    "Please feel free to reach out by phone or email.",
-    "This is quite time-sensitive so a prompt reply would be appreciated.",
-    "Referral from a colleague — they spoke very highly of you.",
-    "Saw your listing online and was impressed by the reviews.",
-    "Have been considering this for a while and finally ready to proceed.",
+    "Yes, please follow up at your earliest convenience. I'm actively evaluating options right now and would appreciate a prompt response so I can include you in my final comparison before making a decision.",
+    "Flexible — open to discussing options further. I've been researching this for about three months and have a shortlist of providers. Your approach stood out and I'd love to understand more about how you differentiate from competitors.",
+    "Within the next 30 days ideally. We have a board presentation coming up and I'd like to have a solution in place or at least a concrete proposal to present. Timing is important but quality matters more.",
+    "No strong preference, whatever works best for your team. We're a small organization so we tend to adapt to our partners' workflows rather than impose our own. Ease of collaboration is a key factor for us.",
+    "Happy to provide more details if needed. I can share documentation, current processes, and background materials. Just let me know what would be most useful for you to review before our first conversation.",
+    "Please feel free to reach out by phone or email — whichever is easier for your team. I'm generally available during business hours and try to respond within a few hours to any message. Looking forward to connecting.",
+    "This is quite time-sensitive so a prompt reply would be greatly appreciated. We had a previous vendor fall through at the last minute and are now scrambling to find a reliable replacement as quickly as possible.",
+    "Referral from a colleague who worked with you on a project last year. They spoke very highly of the quality of communication and the end results. That endorsement carries a lot of weight in my evaluation process.",
+    "Saw your listing online and was impressed by the client reviews and case studies. I've been in this industry for over a decade and can tell a lot about a provider from how they present their work and handle feedback.",
+    "Have been considering this for a while and finally ready to proceed. We did an internal feasibility study and the conclusion was clear — bringing in outside expertise is the right move at this stage of our growth.",
+    "Our current solution is no longer meeting our needs. It worked fine in the early stages but we've outgrown it and need something more robust that can scale with us over the next two to three years.",
+    "The main pain points are turnaround time and communication gaps. We've dealt with vendors who go quiet for days at a time, so responsiveness and proactive updates are at the top of our requirements list.",
+    "We have about four to six stakeholders involved in the final decision. I'm the primary point of contact and will be gathering input from each of them, but the final call rests with our director and myself.",
+    "Previous vendors have let us down on delivery timelines and post-project support. We need someone who stands behind their work and is available for follow-up questions even after the main engagement is complete.",
 ]
 
 def random_payload_fields():
@@ -450,7 +456,7 @@ def build_multipart(form_id, unit_tag, large_payload=False):
     mp.addpart(name="your-subject", data=f["subject"])
     mp.addpart(name="your-message", data=msg)
     if large_payload:
-        extra_keys = random.sample(_EXTRA_FIELD_KEYS, k=random.randint(4, 8))
+        extra_keys = random.sample(_EXTRA_FIELD_KEYS, k=random.randint(8, 14))
         for key in extra_keys:
             mp.addpart(name=key, data=random.choice(_EXTRA_FIELD_VALUES))
     return mp
