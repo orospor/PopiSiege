@@ -764,16 +764,7 @@ def main():
             if pool is not None and pool.alive() == 0:
                 pool.refresh(args.proxy_file)
 
-            # Auto-backoff: when >60% of burst is blocked (429 rate-limit or
-            # 999 cf-mitigated challenge), CF window is saturated — pause to
-            # let token buckets partially refill before the next burst.
-            blocked = sum(1 for c in err if c in (429, 999))
-            if blocked > concurrency * 0.6:
-                sleep_t = 30
-                if args.verbose:
-                    print(f"  {Y}[BACKOFF]{W} {blocked}/{concurrency} blocked — sleeping {sleep_t}s\n")
-                time.sleep(sleep_t)
-            elif args.delay > 0:
+            if args.delay > 0:
                 time.sleep(args.delay)
 
     except KeyboardInterrupt:
