@@ -609,7 +609,8 @@ def send_one(req_num, cfg, pool):
     # Proxy advances only when consecutive failures reach _CRON_FAIL_THRESHOLD.
     if ATTACK_MODE == "cron":
         with _cron_proxy_lock:
-            proxy = _CRON_PROXIES[_cron_proxy_idx % len(_CRON_PROXIES)]
+            my_proxy_idx = _cron_proxy_idx
+            proxy = _CRON_PROXIES[my_proxy_idx % len(_CRON_PROXIES)]
     else:
         proxy = None
         if pool is not None:
@@ -685,22 +686,24 @@ def send_one(req_num, cfg, pool):
         code    = r.status_code if not mit else 999
         if ATTACK_MODE == "cron":
             with _cron_proxy_lock:
-                if mit:
-                    _cron_proxy_fails += 1
-                    if _cron_proxy_fails >= _CRON_FAIL_THRESHOLD:
-                        _cron_proxy_idx  += 1
+                if _cron_proxy_idx == my_proxy_idx:
+                    if mit:
+                        _cron_proxy_fails += 1
+                        if _cron_proxy_fails >= _CRON_FAIL_THRESHOLD:
+                            _cron_proxy_idx  += 1
+                            _cron_proxy_fails = 0
+                    else:
                         _cron_proxy_fails = 0
-                else:
-                    _cron_proxy_fails = 0
         return req_num, code, elapsed, cache, label, (f"cf-mitigated={mit}" if mit else None), impersonate
     except Exception as e:
         elapsed = time.time() - t0
         if ATTACK_MODE == "cron":
             with _cron_proxy_lock:
-                _cron_proxy_fails += 1
-                if _cron_proxy_fails >= _CRON_FAIL_THRESHOLD:
-                    _cron_proxy_idx  += 1
-                    _cron_proxy_fails = 0
+                if _cron_proxy_idx == my_proxy_idx:
+                    _cron_proxy_fails += 1
+                    if _cron_proxy_fails >= _CRON_FAIL_THRESHOLD:
+                        _cron_proxy_idx  += 1
+                        _cron_proxy_fails = 0
         elif pool is not None:
             pool.mark_dead(proxy)
         return req_num, 0, elapsed, "N/A", label, str(e)[:40], impersonate
