@@ -432,20 +432,6 @@ def build_files(form_id, unit_tag):
     }
 
 
-_FAKE_FILENAMES = [
-    "resume.pdf", "cv.pdf", "document.pdf", "attachment.pdf",
-    "inquiry.pdf", "request.pdf", "application.pdf", "form.pdf",
-    "portfolio.pdf", "reference.pdf", "info.pdf", "letter.pdf",
-]
-
-def _fake_pdf_bytes(size_kb):
-    """Generate a plausible-looking PDF wrapper around random bytes."""
-    header = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
-    trailer = b"\n%%EOF\n"
-    padding = os.urandom(max(0, size_kb * 1024 - len(header) - len(trailer)))
-    return header + padding + trailer
-
-
 def build_multipart(form_id, unit_tag, large_payload=False):
     """curl_cffi needs CurlMime, not the requests-style files dict."""
     f = random_payload_fields()
@@ -462,14 +448,6 @@ def build_multipart(form_id, unit_tag, large_payload=False):
         extra_keys = random.sample(_EXTRA_FIELD_KEYS, k=random.randint(4, 8))
         for key in extra_keys:
             mp.addpart(name=key, data=random.choice(_EXTRA_FIELD_VALUES))
-        fname    = random.choice(_FAKE_FILENAMES)
-        size_kb  = random.randint(60, 120)
-        mp.addpart(
-            name="your-file",
-            data=_fake_pdf_bytes(size_kb),
-            filename=fname,
-            content_type="application/pdf",
-        )
     return mp
 
 
