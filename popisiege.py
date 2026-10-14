@@ -152,7 +152,7 @@ ATTACK_MODE      = "cf7"
 
 # ── Cron-mode rotating proxy (Webshare rotating endpoint) ─────────────────────
 # Each request gets a fresh IP from Webshare's pool automatically.
-_CRON_ROTATING_PROXY = "http://nxattwl-rotate:ut2g8d8peqva@p.webshare.io:80"
+_CRON_ROTATING_PROXY = "http://nxatttwl-rotate:ut2g8d8peqva@p.webshare.io:80"
 
 _ACCEPT_LANGS = [
     "en-US,en;q=0.9,fr-FR;q=0.8,fr;q=0.7,de-DE;q=0.6,de;q=0.5,es-ES;q=0.4,es;q=0.3,"
