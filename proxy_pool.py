@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Shared ProxyPool — used by popisiege.py and search_flood.py
-  - 12 GitHub proxy sources (free)
+  - ProxyScrape US proxies only (refreshed every 5 min on their end)
   - Webshare backbone rotating proxy (if proxies_webshare_backbone_creds.txt present)
   - Auto-refresh in background when alive drops below 50% (free mode only)
   - Thread-safe next() / mark_dead()
@@ -15,20 +15,12 @@ import requests, itertools, threading, concurrent.futures, time, os
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"; W = "\033[0m"
 
-# ── 12 free proxy sources ──────────────────────────────────────────────────
+# ── ProxyScrape US-only sources (refreshed every 5 min) ───────────────────
 SOURCES = [
-    ("TheSpeedX HTTP",    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",         "http"),
-    ("TheSpeedX SOCKS4",  "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt",       "socks4"),
-    ("TheSpeedX SOCKS5",  "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt",       "socks5"),
-    ("Proxifly All",      "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt", None),
-    ("monosans HTTP",     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",    "http"),
-    ("monosans SOCKS5",   "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",  "socks5"),
-    ("ShiftyTR HTTP",     "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",          "http"),
-    ("ShiftyTR SOCKS5",   "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks5.txt",        "socks5"),
-    ("clarketm HTTP",     "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt","http"),
-    ("hookzof SOCKS5",    "https://raw.githubusercontent.com/hookzof/socks5_list/master/list.txt",          "socks5"),
-    ("roosterkid HTTP",   "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt",  "http"),
-    ("roosterkid SOCKS5", "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt", "socks5"),
+    ("ProxyScrape US HTTP",   "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/countries/us/http/data.txt",   "http"),
+    ("ProxyScrape US HTTPS",  "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/countries/us/https/data.txt",  "http"),
+    ("ProxyScrape US SOCKS4", "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/countries/us/socks4/data.txt", "socks4"),
+    ("ProxyScrape US SOCKS5", "https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/countries/us/socks5/data.txt", "socks5"),
 ]
 
 TEST_URL        = "https://httpbin.org/ip"

