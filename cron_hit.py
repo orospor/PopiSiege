@@ -7,11 +7,17 @@ Usage:
   python3 cron_hit.py --target metoo-shatkin.com
   python3 cron_hit.py --concurrency 40 --bursts 0
   python3 cron_hit.py --proxy http://user:pass@host:port
+  python3 cron_hit.py --webshare
 """
 
-import time, random, argparse, threading
+import time, random, argparse, threading, os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from curl_cffi import requests as cffi
+
+CREDS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "proxies_webshare_backbone_creds.txt")
+WS_HOST    = "p.webshare.io"
+WS_PORT    = 80
 
 G = "\033[0;32m"; R = "\033[0;31m"; Y = "\033[0;33m"
 C = "\033[0;36m"; W = "\033[0m";    B = "\033[1m"
@@ -23,10 +29,11 @@ PROFILES = [
     ("chrome107", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"),
 ]
 
-_lock = threading.Lock()
-_stats = {"ok": 0, "blocked": 0, "err": 0, "total": 0}
+_lock       = threading.Lock()
+_stats      = {"ok": 0, "blocked": 0, "err": 0, "total": 0}
 _proxy_list = []
 _proxy_idx  = 0
+_ws_proxy   = None
 
 
 def load_proxies(path):
@@ -36,8 +43,19 @@ def load_proxies(path):
     print(f"Loaded {len(_proxy_list)} proxies from {path}")
 
 
+def load_webshare():
+    global _ws_proxy
+    with open(CREDS_FILE) as f:
+        lines = [l.strip() for l in f if l.strip()]
+    user, pwd = lines[0], lines[1]
+    _ws_proxy = f"http://{user}-rotate:{pwd}@{WS_HOST}:{WS_PORT}"
+    print(f"Webshare rotating proxy — {WS_HOST}:{WS_PORT}")
+
+
 def next_proxy():
     global _proxy_idx
+    if _ws_proxy:
+        return _ws_proxy
     with _lock:
         p = _proxy_list[_proxy_idx % len(_proxy_list)]
         _proxy_idx += 1
@@ -52,7 +70,7 @@ def make_url(target):
 def send_one(target, proxy, req_num):
     imp, ua = random.choice(PROFILES)
     url = make_url(target)
-    if _proxy_list:
+    if _ws_proxy or _proxy_list:
         p = next_proxy()
     else:
         p = proxy
@@ -119,12 +137,17 @@ def main():
                     help="single proxy e.g. http://user:pass@host:port")
     ap.add_argument("--proxy-file",  default=None,
                     help="file with one proxy per line (round-robin)")
+    ap.add_argument("--webshare",    action="store_true",
+                    help=f"use Webshare rotating residential proxy (creds from {CREDS_FILE})")
     args = ap.parse_args()
 
-    if args.proxy_file:
+    if args.webshare:
+        load_webshare()
+    elif args.proxy_file:
         load_proxies(args.proxy_file)
 
-    proxy_label = args.proxy_file or args.proxy or "none (system IP)"
+    proxy_label = ("webshare-rotating" if args.webshare
+                   else args.proxy_file or args.proxy or "none (system IP)")
     print(f"{B}cron_hit.py{W}  target={C}{args.target}{W}  "
           f"concurrency={args.concurrency}  "
           f"proxy={proxy_label}")
