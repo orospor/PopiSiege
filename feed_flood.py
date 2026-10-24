@@ -38,7 +38,9 @@ ENDPOINT_SETS = {
     "buffalo": ["/", "/feed/", "/comments/feed/", "/sitemap_index.xml", "/sitemap.xml",
                 "/page-sitemap.xml", "/category-sitemap.xml", "/post-sitemap.xml",
                 "/wp-sitemap.xml", "/author/admin/", "/author/admin/feed/",
-                "/?p=1", "/about/", "/contact/", "/wp-content/"],
+                "/?p=1", "/about/", "/contact/", "/wp-content/",
+                "/page/2/", "/page/3/", "/category/uncategorized/",
+                "/privacy-policy-2/", "/wp-content/themes/", "/wp-content/plugins/"],
 }
 
 _lock       = threading.Lock()
