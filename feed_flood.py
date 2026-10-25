@@ -30,6 +30,13 @@ PROFILES = [
 
 ENDPOINT_SETS = {
     "feed":    ["/feed/", "/comments/feed/"],
+    "woo":     ["/?wc-ajax=get_refreshed_fragments",
+                "/?wc-ajax=apply_coupon",
+                "/?wc-ajax=remove_cart_item",
+                "/?wc-ajax=update_shipping_method",
+                "/?wc-ajax=checkout",
+                "/?wc-ajax=get_cart_contents",
+                "/?wc-ajax=update_order_review"],
     "sitemap": ["/sitemap_index.xml", "/sitemap.xml", "/page-sitemap.xml", "/category-sitemap.xml"],
     "home":    ["/", "/dentist-todd-shatkins-history-of-stalking/"],
     "shatkin": ["/feed/", "/comments/feed/", "/sitemap_index.xml", "/sitemap.xml",
@@ -40,7 +47,14 @@ ENDPOINT_SETS = {
                 "/wp-sitemap.xml", "/author/admin/", "/author/admin/feed/",
                 "/?p=1", "/about/", "/contact/", "/wp-content/",
                 "/page/2/", "/page/3/", "/category/uncategorized/",
-                "/privacy-policy-2/", "/wp-content/themes/", "/wp-content/plugins/"],
+                "/privacy-policy-2/", "/wp-content/themes/", "/wp-content/plugins/",
+                "/?wc-ajax=get_refreshed_fragments",
+                "/?wc-ajax=apply_coupon",
+                "/?wc-ajax=remove_cart_item",
+                "/?wc-ajax=update_shipping_method",
+                "/?wc-ajax=checkout",
+                "/?wc-ajax=get_cart_contents",
+                "/?wc-ajax=update_order_review"],
 }
 
 _lock       = threading.Lock()
@@ -145,7 +159,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups: feed sitemap home shatkin buffalo all")
+                    help="endpoint groups: feed sitemap home shatkin buffalo woo all")
     args = ap.parse_args()
 
     global _endpoints
