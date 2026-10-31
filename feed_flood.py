@@ -60,6 +60,9 @@ ENDPOINT_SETS = {
                 "/?wc-ajax=checkout",
                 "/?wc-ajax=get_cart_contents",
                 "/?wc-ajax=update_order_review"],
+    "shatkin_dynamic": ["/wp-login.php",
+                        "/wp-login.php?action=lostpassword",
+                        "/wp-admin/admin-ajax.php"],
     "shatkin_open": ["/feed/", "/comments/feed/", "/sitemap_index.xml",
                      "/page-sitemap.xml", "/category-sitemap.xml",
                      "/dentist-todd-shatkins-history-of-stalking/",
@@ -198,7 +201,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups: feed sitemap home shatkin shatkin_open buffalo woo all")
+                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic buffalo woo all")
     args = ap.parse_args()
 
     global _endpoints
