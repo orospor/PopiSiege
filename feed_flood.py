@@ -102,13 +102,19 @@ def load_proxies(path):
     print(f"  Loaded {len(_proxy_list)} proxies from {path}")
 
 
-def load_webshare():
+def load_webshare(sessions=0):
     global _ws_proxy
     with open(CREDS_FILE) as f:
         lines = [l.strip() for l in f if l.strip()]
     user, pwd = lines[0], lines[1]
-    _ws_proxy = f"http://{user}-rotate:{pwd}@{WS_HOST}:{WS_PORT}"
-    print(f"  Webshare rotating proxy — {WS_HOST}:{WS_PORT}")
+    if sessions > 0:
+        global _proxy_list
+        _proxy_list = [f"http://{user}-{i}:{pwd}@{WS_HOST}:{WS_PORT}"
+                       for i in range(1, sessions + 1)]
+        print(f"  Webshare {sessions} sticky sessions — {WS_HOST}:{WS_PORT}")
+    else:
+        _ws_proxy = f"http://{user}-rotate:{pwd}@{WS_HOST}:{WS_PORT}"
+        print(f"  Webshare rotating proxy — {WS_HOST}:{WS_PORT}")
 
 
 def next_proxy(single_proxy):
@@ -198,6 +204,8 @@ def main():
     ap.add_argument("--proxy-file",  default=None)
     ap.add_argument("--webshare",    action="store_true",
                     help=f"use Webshare rotating residential proxy (creds from {CREDS_FILE})")
+    ap.add_argument("--webshare-sessions", type=int, default=0, metavar="N",
+                    help="use N Webshare sticky sessions (nxatttwl-1 .. nxatttwl-N) instead of rotate")
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
@@ -213,12 +221,13 @@ def main():
             _endpoints.extend(ENDPOINT_SETS[k])
     _endpoints = list(dict.fromkeys(_endpoints))
 
-    if args.webshare:
-        load_webshare()
+    if args.webshare or args.webshare_sessions:
+        load_webshare(sessions=args.webshare_sessions)
     elif args.proxy_file:
         load_proxies(args.proxy_file)
 
-    proxy_label = ("webshare-rotating" if args.webshare
+    proxy_label = (f"webshare-sessions-{args.webshare_sessions}" if args.webshare_sessions
+                   else "webshare-rotating" if args.webshare
                    else args.proxy_file or args.proxy or "none (system IP)")
     print(f"\n{B}feed_flood.py{W}  target={C}{args.target}{W}  "
           f"concurrency={args.concurrency}  proxy={proxy_label}")
