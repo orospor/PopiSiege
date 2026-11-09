@@ -104,6 +104,9 @@ TARGETS = {
         "url":      "https://metoo-shatkin.com/wp-json/contact-form-7/v1/contact-forms/50/feedback",
         "form_id":  "50",
         "unit_tag": "wpcf7-f50-p30-o1",
+        # 2026-11-10: CF7 endpoint now returns 403 + cf-mitigated:challenge (Managed Challenge).
+        # Blocked from both direct and Webshare proxy — TLS impersonation alone cannot bypass it.
+        # Threshold value kept at original 19 (pre-hardening baseline); endpoint not currently testable.
         "threshold": 19,
     },
     "metoo-buffalo.com": {

