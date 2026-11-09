@@ -11,3 +11,4 @@ __pycache__/
 popiwatch_blocked.json
 proxies_ws_static_*.txt
 proxies_cf7_working.txt
+proxies_webshare_static.txt

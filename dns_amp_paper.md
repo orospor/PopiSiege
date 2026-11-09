@@ -137,6 +137,20 @@ Using the peak measured vector (DNSKEY/verisign.com, AF = 11.3× with EDNS0):
 
 For context, 11.3 Gbps is sufficient to saturate most unprotected datacenter uplinks and exceeds DigitalOcean's default DDoS threshold for single-droplet protection.
 
+### 4.5 Per-Source Rate Limiting Under Concurrency Stress
+
+To test whether the resolver applies per-source-IP rate limiting, `dns_amp_poc.py` was run with `--concurrency 1000 --loops 0`, firing 1000 simultaneous UDP queries per burst from a single source IP:
+
+| Burst | Queries Sent | Responses Received | Peak AF |
+|-------|-------------|-------------------|---------|
+| 1     | 1000        | 156               | 11.3×   |
+| 2     | 1000        | 1                 | 1.3×    |
+| 3–5+  | 1000        | 0–1               | —       |
+
+**Interpretation:** After ~156 rapid responses in burst 1, the resolver rate-limits the source IP to near-zero for subsequent bursts. This suggests a per-source-IP query rate limit or the macOS socket buffer becoming a bottleneck at 1000 simultaneous UDP sockets.
+
+**Implication for real attacks:** A spoofed-source-IP attack is unaffected by this per-source rate limit, because every packet carries a different (victim's) source IP from the resolver's perspective. Botnets with many diverse exit nodes similarly bypass it. This rate limit protects against unsophisticated single-source floods only; it does not reduce the amplification threat from spoofed-packet attacks.
+
 ---
 
 ## 5. Full Measurement Data (CSV)
