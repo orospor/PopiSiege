@@ -126,13 +126,16 @@ ENDPOINT_SETS = {
     ],
     # buffalo: /feed/ and /comments/feed/ now 301→home (closed); removed 2026-11-10 probe.
     # /post-sitemap.xml → 404, /category-sitemap.xml → 404 on buffalo.
+    # /?wc-ajax=* endpoints: 200 MISS on buffalo (NOT blocked unlike shatkin datacenter IPs).
+    # wp-cron.php?doing_wp_cron=1: 200 DYNAMIC confirmed 2026-11-19.
     "buffalo": ["/", "/sitemap_index.xml",
                 "/page-sitemap.xml",
                 "/wp-sitemap.xml", "/author/admin/",
-                "/?p=1", "/about/", "/contact/",
+                "/contact/",
                 "/page/2/", "/page/3/", "/category/uncategorized/",
                 "/privacy-policy-2/",
                 "/wp-admin/admin-ajax.php?action=heartbeat",
+                "/wp-cron.php?doing_wp_cron=1",
                 "/?wc-ajax=get_refreshed_fragments",
                 "/?wc-ajax=apply_coupon",
                 "/?wc-ajax=remove_cart_item",
@@ -140,6 +143,29 @@ ENDPOINT_SETS = {
                 "/?wc-ajax=checkout",
                 "/?wc-ajax=get_cart_contents",
                 "/?wc-ajax=update_order_review"],
+    # buffalo REST bypass — discovered 2026-11-19 probe.
+    # ?rest_route= bypasses CF Managed Challenge on /wp-json/* (same technique as shatkin).
+    # Responses are MISS (not DYNAMIC) but hit PHP+DB workers; unique params vary cache keys.
+    # Peak: /?rest_route=/wp/v2/posts&_embed=1 → 197.5KB MISS (larger than shatkin).
+    # WooCommerce /?wc-ajax=* returns 200 MISS at 54.4KB each (NOT blocked from datacenter IPs).
+    "buffalo_rest_bypass": [
+        "/?rest_route=/wp/v2/posts&_embed=1",         # 197.5KB MISS
+        "/?rest_route=/wp/v2/pages&_embed=1",         # 134.1KB MISS
+        "/?rest_route=/wp/v2/pages&per_page=100",     # 133.2KB MISS
+        "/?rest_route=/wp/v2/media&per_page=100",     #  75.8KB MISS
+        "/?rest_route=/wp/v2/media&_embed=1",         #  74.4KB MISS
+        "/?rest_route=/wp/v2/posts&per_page=100",     #  59.4KB MISS
+        "/?wc-ajax=get_refreshed_fragments",          #  54.4KB MISS
+        "/?wc-ajax=apply_coupon",                     #  54.4KB MISS
+        "/?wc-ajax=remove_cart_item",                 #  54.4KB MISS
+        "/?wc-ajax=update_shipping_method",           #  54.4KB MISS
+        "/?wc-ajax=checkout",                         #  54.4KB MISS
+        "/?wc-ajax=get_cart_contents",                #  54.4KB MISS
+        "/?wc-ajax=update_order_review",              #  54.4KB MISS
+        "/?rest_route=/wp/v2/tags&per_page=100",      #  43.2KB MISS
+        "/?rest_route=/wp/v2/categories&per_page=100",#  16.3KB MISS
+        "/wp-cron.php?doing_wp_cron=1",               #   0.0KB DYNAMIC
+    ],
 }
 
 _lock       = threading.Lock()
@@ -266,7 +292,7 @@ def main():
     ap.add_argument("--endpoints",   nargs="+",
                     choices=list(ENDPOINT_SETS.keys()) + ["all"],
                     default=["all"],
-                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic shatkin_rest_bypass login_only lostpassword users heartbeat buffalo woo all")
+                    help="endpoint groups: feed sitemap home shatkin shatkin_open shatkin_dynamic shatkin_rest_bypass login_only lostpassword users heartbeat buffalo buffalo_rest_bypass woo all")
     args = ap.parse_args()
 
     global _endpoints
