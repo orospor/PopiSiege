@@ -148,23 +148,31 @@ ENDPOINT_SETS = {
     # Responses are MISS (not DYNAMIC) but hit PHP+DB workers; unique params vary cache keys.
     # Peak: /?rest_route=/wp/v2/posts&_embed=1 → 197.5KB MISS (larger than shatkin).
     # WooCommerce /?wc-ajax=* returns 200 MISS at 54.4KB each (NOT blocked from datacenter IPs).
+    # buffalo_rest_bypass — probe 2026-11-19 from VPS (Webshare backbone IPs).
+    # ?rest_route= bypasses CF Managed Challenge on /wp-json/* (path rule misses query param).
+    # Removed: checkout (403 blocked), apply_coupon/update_shipping (EXPIRED), pages/media/posts _embed+per_page duplicates (EXPIRED).
+    # Added: /?rest_route=/ (250KB), oEmbed variants (54.5KB ea), /page/2/, author, sitemaps.
     "buffalo_rest_bypass": [
-        "/?rest_route=/wp/v2/posts&_embed=1",         # 197.5KB MISS
-        "/?rest_route=/wp/v2/pages&_embed=1",         # 134.1KB MISS
-        "/?rest_route=/wp/v2/pages&per_page=100",     # 133.2KB MISS
-        "/?rest_route=/wp/v2/media&per_page=100",     #  75.8KB MISS
-        "/?rest_route=/wp/v2/media&_embed=1",         #  74.4KB MISS
-        "/?rest_route=/wp/v2/posts&per_page=100",     #  59.4KB MISS
-        "/?wc-ajax=get_refreshed_fragments",          #  54.4KB MISS
-        "/?wc-ajax=apply_coupon",                     #  54.4KB MISS
-        "/?wc-ajax=remove_cart_item",                 #  54.4KB MISS
-        "/?wc-ajax=update_shipping_method",           #  54.4KB MISS
-        "/?wc-ajax=checkout",                         #  54.4KB MISS
-        "/?wc-ajax=get_cart_contents",                #  54.4KB MISS
-        "/?wc-ajax=update_order_review",              #  54.4KB MISS
-        "/?rest_route=/wp/v2/tags&per_page=100",      #  43.2KB MISS
-        "/?rest_route=/wp/v2/categories&per_page=100",#  16.3KB MISS
-        "/wp-cron.php?doing_wp_cron=1",               #   0.0KB DYNAMIC
+        "/?rest_route=/",                                                           # 250.2KB MISS
+        "/?rest_route=/wp/v2/posts&_embed=1",                                       # 197.5KB MISS
+        "/?rest_route=/wp/v2/pages&per_page=100",                                   # 133.2KB MISS
+        "/?rest_route=/wp/v2/media&per_page=100",                                   #  75.8KB MISS
+        "/?oembed=1&url=https%3A%2F%2Fmetoo-buffalo.com%2Fabout%2F&format=json",    #  54.5KB MISS
+        "/?oembed=1&url=https%3A%2F%2Fmetoo-buffalo.com%2F%3Fp%3D1&format=json",   #  54.5KB MISS
+        "/?oembed=1&url=https%3A%2F%2Fmetoo-buffalo.com%2F%3Fp%3D2&format=json",   #  54.5KB MISS
+        "/?oembed=1&url=https%3A%2F%2Fmetoo-buffalo.com%2F%3Fp%3D850&format=xml",  #  54.5KB MISS
+        "/page/2/",                                                                 #  54.4KB MISS
+        "/?wc-ajax=get_refreshed_fragments",                                        #  54.4KB MISS
+        "/?wc-ajax=update_order_review",                                            #  54.4KB MISS
+        "/?wc-ajax=remove_cart_item",                                               #  54.4KB MISS
+        "/?wc-ajax=get_cart_contents",                                              #  54.4KB MISS
+        "/?rest_route=/wp/v2/tags&per_page=100",                                    #  43.2KB MISS
+        "/?author=1",                                                               #  36.3KB MISS
+        "/?author=2",                                                               #  36.3KB MISS
+        "/category-sitemap.xml",                                                    #  35.7KB MISS
+        "/post-sitemap.xml",                                                        #  35.7KB MISS
+        "/?rest_route=/wp/v2/categories&per_page=100",                              #  16.3KB MISS
+        "/wp-cron.php?doing_wp_cron=1",                                             #   0.0KB DYNAMIC
     ],
 }
 
@@ -194,7 +202,7 @@ def load_webshare(sessions=0):
                        for i in range(1, sessions + 1)]
         print(f"  Webshare {sessions} sticky sessions — {WS_HOST}:{WS_PORT}")
     else:
-        _ws_proxy = f"http://{user}-rotate:{pwd}@{WS_HOST}:{WS_PORT}"
+        _ws_proxy = f"http://{user}:{pwd}@{WS_HOST}:{WS_PORT}"
         print(f"  Webshare rotating proxy — {WS_HOST}:{WS_PORT}")
 
 
