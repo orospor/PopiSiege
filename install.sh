@@ -90,6 +90,9 @@ _make_cmd /usr/local/bin/feed-flood \
 _make_cmd /usr/local/bin/feed-flood-ws \
     "exec python3 /opt/popisiege/feed_flood.py --webshare \"\$@\""
 
+_make_cmd /usr/local/bin/buffalo-probe \
+    "exec python3 /opt/popisiege/buffalo_probe.py \"\$@\""
+
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${B}=============================="
@@ -123,6 +126,11 @@ echo ""
 echo -e "  ${B}DNS Flood:${W}"
 echo    "    dns-flood  --target <IP> --workers 300"
 echo    "    dns-tcp-flood --target <IP> --workers 300"
+echo ""
+echo -e "  ${B}Buffalo Probe (endpoint discovery):${W}"
+echo    "    buffalo-probe"
+echo    "    buffalo-probe --target metoo-shatkin.com"
+echo    "    buffalo-probe --workers 20"
 echo ""
 echo -e "  ${B}Defense monitor:${W}"
 echo    "    popiwatch --log /var/log/nginx/access.log"
