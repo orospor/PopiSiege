@@ -107,22 +107,17 @@ ENDPOINT_SETS = {
     # ?rest_route= reaches the WP REST API without triggering CF's /wp-json/* Managed Challenge rule.
     # oEmbed: 47.8KB MISS each; url= param varies the cache key so every request is unique.
     # media&_embed=1: 47.6KB MISS; pages&_embed=1: 38.5KB MISS — all hit PHP + DB workers.
+    # shatkin_rest_bypass — probe 2026-11-19 from VPS (Webshare backbone IPs).
+    # oEmbed all blocked (was open before). Most ?rest_route= variants now blocked.
+    # wc-ajax mostly blocked; only get_cart_contents survives.
     "shatkin_rest_bypass": [
-        # oEmbed — 47.8KB MISS, vary url= for unique cache keys
-        "/?oembed=1&url=https://metoo-shatkin.com/dentist-todd-shatkins-history-of-stalking/&format=json",
-        "/?oembed=1&url=https://metoo-shatkin.com/?p=1&format=json",
-        "/?oembed=1&url=https://metoo-shatkin.com/?p=30&format=json",
-        "/?oembed=1&url=https://metoo-shatkin.com/&format=json",
-        "/?oembed=1&url=https://metoo-shatkin.com/page/2/&format=json",
-        "/?oembed=1&url=https://metoo-shatkin.com/dentist-todd-shatkins-history-of-stalking/&format=xml",
-        # REST bypass via ?rest_route= — bypasses CF Managed Challenge on /wp-json/*
-        "/?rest_route=/wp/v2/media&_embed=1",        # 47.6KB MISS
-        "/?rest_route=/wp/v2/pages&_embed=1",         # 38.5KB MISS
-        "/?rest_route=/wp/v2/pages&per_page=100",     # 36.5KB MISS
-        "/?rest_route=/wp/v2/media&per_page=100",     # 28.5KB MISS
-        "/?rest_route=/wp/v2/posts&_embed=1",         # 14.3KB MISS
-        "/?rest_route=/wp/v2/posts&per_page=100",     #  9.2KB MISS
-        "/?rest_route=/wp/v2/categories&per_page=100", # 5.0KB MISS
+        "/?rest_route=/",                         # 240.4KB MISS
+        "/?wc-ajax=get_cart_contents",            #  47.7KB MISS
+        "/?rest_route=/wp/v2/media&_embed=1",     #  47.6KB MISS
+        "/?rest_route=/wp/v2/pages&per_page=100", #  36.5KB MISS
+        "/?p=850",                                #  32.8KB MISS (404, still PHP hit)
+        "/?rest_route=/wp/v2/posts&_embed=1",     #  14.3KB MISS
+        "/wp-cron.php?doing_wp_cron=1",           #   0.0KB DYNAMIC
     ],
     # buffalo: /feed/ and /comments/feed/ now 301→home (closed); removed 2026-11-10 probe.
     # /post-sitemap.xml → 404, /category-sitemap.xml → 404 on buffalo.
